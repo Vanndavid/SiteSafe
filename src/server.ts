@@ -1,14 +1,27 @@
 import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import apiRoutes from './routes/api';
 
-console.log('--- STARTING SERVER ---'); // This forces a log at the very top
+dotenv.config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+// All routes defined in src/routes/api.ts will be prefixed with /api
+// e.g. /api/health, /api/upload
+app.use('/api', apiRoutes);
+
+// Optional: Redirect root to health check for convenience
 app.get('/', (req, res) => {
-  res.send('HELLO WORLD - SITE SAFE IS ALIVE');
+  res.redirect('/api/health');
 });
 
 app.listen(port, () => {
-  console.log(`✅ SUCCESS: Server is running on http://localhost:${port}`);
+  console.log(`🚀 Server running at http://localhost:${port}`);
 });
