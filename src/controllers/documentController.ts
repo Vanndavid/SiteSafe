@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import DocumentModel from '../models/Document';
 import { addDocumentJob } from '../queues/documentQueue';
+import NotificationModel from '../models/Notification';
 
 // GET /api/health
 export const checkHealth = (req: Request, res: Response) => {
@@ -36,6 +37,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
       message: 'Upload accepted. Processing in background.',
       file: {
         id: newDoc._id,
+        originalName: newDoc.originalName,
         status: 'pending' // Frontend sees "Pending"
       }
     });
@@ -88,5 +90,30 @@ export const getAllDocuments = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+};
+
+export const getNotifications = async (req: Request, res: Response) => {
+  try {
+    // Get last 5 unread notifications
+    const alerts = await NotificationModel.find({ read: false })
+      .sort({ createdAt: -1 })
+      .limit(5);
+    res.json(alerts);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+};
+export const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await NotificationModel.findByIdAndUpdate(id, {
+      read: true
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark notification read' });
   }
 };

@@ -1,7 +1,7 @@
-# SiteSafe.ai  
+# Ai Compliance 
 ### AI-Assisted Compliance Monitoring for Construction & Trade Sites
 
-**SiteSafe.ai** is a prototype internal compliance tool designed for construction, logistics, and trade businesses to prevent **expired licenses, certifications, and insurance documents** from causing site shutdowns, safety incidents, or regulatory fines.
+**Ai Compliance** is a prototype internal compliance tool designed for construction, logistics, and trade businesses to prevent **expired licenses, certifications, and insurance documents** from causing site shutdowns, safety incidents, or regulatory fines.
 
 The system uses **multimodal AI** to extract and validate document data, then continuously monitors expiry status and alerts site managers before issues occur.
 
@@ -30,7 +30,7 @@ The result:
 - Fines
 - Safety risks
 
-**SiteSafe.ai automates this workflow** with minimal friction for users.
+**Ai Compliance automates this workflow** with minimal friction for users.
 
 ---
 

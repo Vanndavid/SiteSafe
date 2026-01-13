@@ -3,11 +3,12 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/db'; // <--- IMPORT THIS
 import apiRoutes from './routes/api';
-
+import { startScheduler } from './services/scheduler';
 dotenv.config();
 
 // --- CONNECT TO DATABASE ---
 connectDB(); 
+startScheduler();
 
 const app = express();
 const port = process.env.PORT || 3000;
