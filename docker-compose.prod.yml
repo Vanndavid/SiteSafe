@@ -4,8 +4,6 @@ services:
     image: mongo:latest
     container_name: aicompliance_mongo
     restart: always
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     networks: [web]
@@ -15,8 +13,6 @@ services:
     image: mongo-express
     container_name: aicompliance_gui
     restart: always
-    ports:
-      - "8081:8081"
     environment:
       ME_CONFIG_MONGODB_SERVER: mongo
       ME_CONFIG_MONGODB_PORT: 27017
@@ -29,8 +25,6 @@ services:
     image: redis:alpine
     container_name: aicompliance_redis
     restart: always
-    ports:
-      - "6379:6379"
     networks: [web]
   # ✅ Backend (DEV mode)
   backend:
