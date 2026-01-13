@@ -4,4 +4,13 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    host: true,               // allow 0.0.0.0 (Docker)
+    allowedHosts: [
+      'sitesafe.local',
+      'api.sitesafe.local',
+      'aicompliance.vanndavidteng.com',
+      'api.aicompliance.vanndavidteng.com',
+    ],
+  },
 })

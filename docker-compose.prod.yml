@@ -1,56 +1,100 @@
-version: '3.8'
-
 services:
+  # Database
   mongo:
-    image: mongo:6
+    image: mongo:latest
+    container_name: aicompliance_mongo
     restart: always
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     networks: [web]
 
-  redis:
-    image: redis:alpine
+  # Database GUI (View at http://localhost:8081)
+  mongo-express:
+    image: mongo-express
+    container_name: aicompliance_gui
     restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_PORT: 27017
+    depends_on:
+      - mongo
     networks: [web]
 
+  # Queue Service (Required for Day 5)
+  redis:
+    image: redis:alpine
+    container_name: aicompliance_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks: [web]
+  # ✅ Backend (DEV mode)
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aicompliance_api
+    image: node:20-alpine
+    container_name: aicompliance_backend
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: npm run dev
+    # ports:
+    #   - "3000:3000"
     env_file:
-      - .env.production
+      - .env
     depends_on:
       - mongo
       - redis
-    restart: always
+    restart: unless-stopped
+    # traefik
     networks: [web]
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.aicompliance.rule=Host(`aicompliance.vanndavidteng.com`)"
-      - "traefik.http.routers.aicompliance.entrypoints=web,websecure"
-      - "traefik.http.routers.aicompliance.tls=true"
-      - "traefik.http.routers.aicompliance.tls.certresolver=letsencrypt"
-      - "traefik.http.services.aicompliance.loadbalancer.server.port=3000"
-  
+      - "traefik.http.routers.aicompliance-api.rule=Host(`api.aicompliance.vanndavidteng.com`)"
+      - "traefik.http.routers.aicompliance-api.entrypoints=web,websecure"
+      - "traefik.http.routers.aicompliance-api.tls=true"
+      - "traefik.http.routers.aicompliance-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.aicompliance-api.loadbalancer.server.port=3000"
+
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    container_name: tradecomply_worker
+    image: node:20-alpine
+    container_name: aicompliance_worker
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: npx tsx src/workers/documentWorker.ts
     env_file:
-      - .env.production
+      - .env
     depends_on:
-      - mongo
       - redis
-    restart: always
+      - mongo
+    restart: unless-stopped
+    networks: [web]
+  frontend:
+    image: node:20-alpine
+    container_name: aicompliance_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host"
+    # ports:
+    #   - "5173:5173"
+    restart: unless-stopped
+    # traefik
     networks: [web]
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.aicompliance-frontend.rule=Host(`aicompliance.vanndavidteng.com`)"
+      - "traefik.http.routers.aicompliance-frontend.entrypoints=web,websecure"
+      - "traefik.http.routers.aicompliance-frontend.tls=true"
+      - "traefik.http.routers.aicompliance-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.aicompliance-frontend.loadbalancer.server.port=5173"
+
+volumes:
+  mongo_data:
 
 networks:
   web:
     external: true
-
-volumes:
-  mongo_data:
