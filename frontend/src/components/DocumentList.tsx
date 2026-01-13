@@ -13,7 +13,6 @@ export const DocumentList = ({ documents }: Props) => {
   if (documents.length === 0) return null;
 
   const getStatusChip = (status: string, extraction?: AiExtraction) => {
-    console.log('Getting status chip for', status, extraction);
     if (status === 'pending') return <Chip icon={<CircularProgress size={16} />} label="Processing" color="warning" variant="outlined" />;
     if (status === 'failed') return <Chip icon={<ErrorIcon />} label="Failed" color="error" variant="outlined" />;
     

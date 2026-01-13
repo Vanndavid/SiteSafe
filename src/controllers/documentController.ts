@@ -104,7 +104,7 @@ export const getNotifications = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch alerts' });
   }
 };
-export const markAsRead = async (req, res) => {
+export const markAsRead = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

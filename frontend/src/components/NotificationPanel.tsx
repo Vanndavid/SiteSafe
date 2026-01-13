@@ -3,6 +3,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import CloseIcon from '@mui/icons-material/Close';
 import { IconButton, Box } from '@mui/material';
 import type { NotificationItem } from '../types';
+import { api } from '../api/client';
 
 interface Props {
   notifications: NotificationItem[];
@@ -29,11 +30,8 @@ const demoNotifications: NotificationItem[] = [
 
 export const NotificationPanel = ({ notifications, onRead }: Props) => {
   if (notifications.length === 0) return null;
-  const dataToRender =notifications;
   const markRead = async (id: string) => {
-    await fetch(`http://localhost:3000/api/notifications/${id}/read`, {
-      method: 'PATCH'
-    });
+    await api.patch(`/api/notifications/${id}/read`);
     onRead(id);
   };
   return (
@@ -47,7 +45,7 @@ export const NotificationPanel = ({ notifications, onRead }: Props) => {
       </Typography>
 
       <List dense>
-        {dataToRender.map((notif) => (
+        {notifications.map((notif) => (
           <ListItem key={notif._id} 
             secondaryAction={
               <IconButton

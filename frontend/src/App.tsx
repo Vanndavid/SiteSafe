@@ -4,7 +4,7 @@ import { Header } from './components/Header';
 import { UploadArea } from './components/UploadArea';
 import { DocumentList } from './components/DocumentList';
 import { NotificationPanel } from './components/NotificationPanel';
-
+import { api } from './api/client';
 import type { DocumentItem, NotificationItem } from './types';
 
 export default function App() {
@@ -18,16 +18,14 @@ export default function App() {
   }, []);
 
   const fetchDocuments = async () => {
-    const res = await fetch('http://localhost:3000/api/documents');
-    if (res.ok) setDocuments(await res.json());
+    const res = await api.get('api/documents');
+    setDocuments(res.data);
   };
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/notifications');
-      if (res.ok) {
-        setNotifications(await res.json());
-      }
+      const res = await api.get('api/notifications');
+      setNotifications(res.data);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
     }
@@ -35,8 +33,8 @@ export default function App() {
   const pollForStatus = (docId: string) => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/document/${docId}`);
-        const data = await res.json();
+        const res = await api.get(`api/document/${docId}`);
+        const data = res.data;
 
         if (data.status === 'processed' || data.status === 'failed') {
           clearInterval(interval);
@@ -61,19 +59,18 @@ export default function App() {
   const uploadFile = async (file: File) => {
     setUploading(true);
     setError(null);
-
+    console.log('Uploading file:', file);
     try {
       const formData = new FormData();
       formData.append('document', file);
 
-      const res = await fetch('http://localhost:3000/api/upload', {
-        method: 'POST',
-        body: formData
+      const res = await api.post('/api/upload', formData,{
+        headers: {
+          'Content-Type': undefined,
+        },
       });
 
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const data = res.data;
       setDocuments(prev => [
         { id: data.file.id, name: data.file.originalName, status: 'pending' },
         ...prev
