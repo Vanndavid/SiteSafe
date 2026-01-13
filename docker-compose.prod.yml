@@ -1,7 +1,7 @@
 services:
   # Database
   mongo:
-    image: mongo:latest
+    image: mongo:6
     container_name: aicompliance_mongo
     restart: always
     volumes:
