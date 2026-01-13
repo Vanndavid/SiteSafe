@@ -8,4 +8,5 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-CMD ["node", "dist/worker.js"]
+CMD ["node", "dist/workers/documentWorker.js"]
+
