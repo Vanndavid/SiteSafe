@@ -86,7 +86,6 @@ export default function App() {
   return (
     <Box minHeight="100vh" bgcolor="#f5f5f5">
       <Header />
-
       <Container maxWidth="md" sx={{ mt: 6 }}>
         <Typography variant="h3" textAlign="center" fontWeight="bold" mb={4}>
           AI Compliance Officer
