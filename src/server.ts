@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import connectDB from './config/db'; // <--- IMPORT THIS
 import apiRoutes from './routes/api';
 import { startScheduler } from './services/scheduler';
+import { clerkMiddleware } from '@clerk/express'
 dotenv.config();
 
 // --- CONNECT TO DATABASE ---
@@ -17,13 +18,15 @@ app.use(cors({
     origin: [
       'https://aicompliance.vanndavidteng.com',
       'http://localhost:5173', // dev
-      'http://sitemsafe.local', // dev
+      'http://sitesafe.local', // dev
     ],
     credentials: true,
   }));
-app.use(express.json());
+app.use(express.json());  
 
+app.use(clerkMiddleware())
 app.use('/api', apiRoutes);
+
 
 app.get('/', (req, res) => {
   res.redirect('/api/health');

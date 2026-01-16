@@ -4,7 +4,8 @@ import { Header } from './components/Header';
 import { UploadArea } from './components/UploadArea';
 import { DocumentList } from './components/DocumentList';
 import { NotificationPanel } from './components/NotificationPanel';
-import { api } from './api/client';
+import { api, setAuthToken } from './api/client';
+import { useAuth } from '@clerk/clerk-react';
 import type { DocumentItem, NotificationItem } from './types';
 
 export default function App() {
@@ -12,13 +13,28 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  // auth token
+  const { getToken, isSignedIn } = useAuth();
   useEffect(() => {
-    fetchDocuments();
-    fetchNotifications();
-  }, []);
+    const setupApi = async () => {
+      if (isSignedIn) {
+        
+        console.log("here")
+        const token = await getToken();
+        setAuthToken(token); // Now all api.get/post calls have the token!
+        fetchDocuments();
+        fetchNotifications();
+      }
+    };
+    setupApi();
+  }, [isSignedIn, getToken]);
+
+
 
   const fetchDocuments = async () => {
-    const res = await api.get('api/documents');
+    
+    console.log("2nd")
+    const res = await api.get("/api/documents");
     setDocuments(res.data);
   };
 

@@ -3,6 +3,8 @@ import DocumentModel from '../models/Document';
 import { addDocumentJob } from '../queues/documentQueue';
 import NotificationModel from '../models/Notification';
 
+import { getAuth } from '@clerk/express'; 
+
 // GET /api/health
 export const checkHealth = (req: Request, res: Response) => {
   res.json({ status: 'active', message: ' API is running 🟢' });
@@ -73,6 +75,8 @@ export const getDocumentStatus = async (req: Request, res: Response) => {
 // --- NEW: Get All Documents (History) ---
 export const getAllDocuments = async (req: Request, res: Response) => {
   try {
+    const { userId } = getAuth(req);
+    console.log('Fetching documents for user:', userId);
     // Get last 20 docs, newest first
     const docs = await DocumentModel.find()
       .sort({ uploadDate: -1 })
@@ -83,7 +87,8 @@ export const getAllDocuments = async (req: Request, res: Response) => {
       id: doc._id,
       name: doc.originalName,
       status: doc.status,
-      extraction: doc.extractedData
+      extraction: doc.extractedData,
+      userId: userId
     }));
 
     res.json(formattedDocs);
@@ -95,6 +100,8 @@ export const getAllDocuments = async (req: Request, res: Response) => {
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
+    const { userId } = getAuth(req);
+    console.log('Fetching documents for user:', userId);
     // Get last 5 unread notifications
     const alerts = await NotificationModel.find({ read: false })
       .sort({ createdAt: -1 })
