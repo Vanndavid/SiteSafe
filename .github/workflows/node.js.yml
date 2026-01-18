@@ -1,6 +1,3 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
 name: Node.js CI
 
 on:
@@ -11,21 +8,45 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+
+    # 🚀 Add Services (Database & Queue for testing)
+    services:
+      mongo:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [20.x] # Match your local version
 
     steps:
     - uses: actions/checkout@v4
+    
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+    
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Build Backend
+      run: npm run build
+
+    # Run tests with Environment Variables pointing to the service containers
+    - name: Run Integration Tests
+      run: npm test
+      env:
+        PORT: 4000
+        MONGODB_URI: mongodb://localhost:27017/tradecomply_test
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+        CLERK_SECRET_KEY: mock_key_for_ci
+        GEMINI_API_KEY: mock_key_for_ci
