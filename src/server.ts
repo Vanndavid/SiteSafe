@@ -24,8 +24,8 @@ app.use(cors({
   }));
 app.use(express.json());  
 
-app.use(clerkMiddleware())
 app.use('/api', apiRoutes);
+app.use(clerkMiddleware())
 
 
 app.get('/', (req, res) => {
