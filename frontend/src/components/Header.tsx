@@ -12,7 +12,11 @@ export const Header = () => {
         </Typography>
         {/* <Button color="inherit">Login</Button> */}
         <SignedOut>
-          <SignInButton />
+           <SignInButton mode="modal">
+            <Button style={{ color: 'white' }}>
+              Sign In
+            </Button>
+          </SignInButton>
         </SignedOut>
         <SignedIn>
           <UserButton />

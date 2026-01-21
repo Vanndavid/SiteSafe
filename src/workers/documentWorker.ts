@@ -48,7 +48,8 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
           expiryDate: aiResult.expiryDate,
           licenseNumber: aiResult.licenseNumber,
           holderName: aiResult.name,
-          confidence: aiResult.confidence
+          confidence: aiResult.confidence,
+          content: aiResult.content
         }
       },
       { new: true }

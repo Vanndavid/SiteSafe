@@ -26,9 +26,10 @@ export const analyzeDocument = async (filePath: string, mimeType: string) => {
       2. Extract the Expiry Date (YYYY-MM-DD).
       3. Extract the License Number.
       4. Extract the Name.
+      4. Extract the content.
       
       Output ONLY raw JSON. No markdown.
-      Structure: { "type": "string", "expiryDate": "string", "licenseNumber": "string", "name": "string", "confidence": number }
+      Structure: { "type": "string", "expiryDate": "string", "licenseNumber": "string", "name": "string", "confidence": number, "content": "string" }
     `;
 
     // New SDK syntax for generating content

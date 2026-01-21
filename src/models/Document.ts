@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { text } from 'stream/consumers';
 
 export interface IDocument extends Document {
   userId: string;        // Linked to Clerk ID
@@ -14,6 +15,7 @@ export interface IDocument extends Document {
     licenseNumber?: string;
     holderName?: string;
     confidence?: number;
+    content?: string;
   };
 }
 
@@ -34,7 +36,8 @@ const DocumentSchema = new Schema<IDocument>({
     expiryDate: String, // Storing as string for now to match JSON, can parse to Date later
     licenseNumber: String,
     holderName: String,
-    confidence: Number
+    confidence: Number,
+    content: String,
   }
 });
 

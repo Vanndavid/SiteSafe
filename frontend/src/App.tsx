@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Container, Typography } from '@mui/material';
+import { Box, Button, Container, Typography } from '@mui/material';
 import { Header } from './components/Header';
 import { UploadArea } from './components/UploadArea';
 import { DocumentList } from './components/DocumentList';
@@ -20,8 +20,6 @@ export default function App() {
   useEffect(() => {
     const setupApi = async () => {
       if (isSignedIn) {
-        
-        console.log("here")
         const token = await getToken();
         setAuthToken(token); // Now all api.get/post calls have the token!
         fetchDocuments();
@@ -37,8 +35,6 @@ export default function App() {
 
 
   const fetchDocuments = async () => {
-    
-    console.log("2nd")
     const res = await api.get("/api/documents");
     setDocuments(res.data);
   };
@@ -114,6 +110,15 @@ export default function App() {
        
         <Typography color="text.secondary" sx={{ mb: 3 }}>
           Automatically extracts expiry dates from uploaded documents, monitors them continuously, and reminds users before deadlines (e.g. 30 days before expiry) to reduce compliance risk and operational disruption.
+          <Button 
+            variant="text" 
+            component="a" 
+            href="/Sample.pdf" // Path relative to the public folder
+            download="Sample_Document.pdf" // Suggests a filename for the download
+            sx={{ ml: 1, textTransform: 'none', verticalAlign: 'baseline' }}
+          >
+            Download Sample
+          </Button>
         </Typography>
         <NotificationPanel notifications={notifications} onRead={handleNotificationRead} />
         <UploadArea uploading={uploading} error={error} onUpload={uploadFile} />

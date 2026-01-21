@@ -1,9 +1,10 @@
-import { Card, CardContent, Box, Typography, List, ListItem, ListItemIcon, ListItemText, Grid, Divider, Chip } from '@mui/material';
+import { Card, CardContent, Box, Typography, List, ListItem, ListItemIcon, ListItemText, Grid, Divider, Chip, Tooltip, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { DocumentItem, AiExtraction } from '../types';
+import { useState } from 'react';
 
 interface Props {
   documents: DocumentItem[];
@@ -20,6 +21,9 @@ export const DocumentList = ({ documents }: Props) => {
     return <Chip icon={<CheckCircleIcon />} label={isValid ? "Valid" : "Review"} color={isValid ? "success" : "info"} variant="outlined" />;
   };
 
+  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
+  const handleOpen = (doc:DocumentItem) => setSelectedDoc(doc);
+  const handleClose = () => setSelectedDoc(null)
   return (
     <Card sx={{ border: '1px solid #e0e0e0', animation: 'fadeIn 0.5s ease-in' }}>
       <CardContent>
@@ -33,8 +37,12 @@ export const DocumentList = ({ documents }: Props) => {
             <Box key={doc.id}>
               {idx > 0 && <Divider />}
               <ListItem alignItems="flex-start">
-                <ArticleIcon sx={{ mr: 2, mt: 0.5 }} />
-
+                <Tooltip title="Read Content" placement="top">
+                  <Button color='secondary' disabled={!(doc.extraction?.content??false)} onClick={() => handleOpen(doc)}>
+                    <ArticleIcon sx={{ mr: 2, mt: 0.5 }} />
+                  </Button>
+                </Tooltip>
+             
                 {/* 👇 FULL CONTROL — NO ListItemText */}
                 <Box width="100%">
                   <Box
@@ -62,6 +70,14 @@ export const DocumentList = ({ documents }: Props) => {
                         <Typography variant="caption">Holder</Typography>
                         <Typography>{doc.extraction.holderName || 'N/A'}</Typography>
                       </Grid>
+                      <Grid>
+                        <Typography variant="caption">Type</Typography>
+                        <Typography>{doc.extraction.type || 'N/A'}</Typography>
+                      </Grid>
+                       <Grid>
+                        <Typography variant="caption">Confident</Typography>
+                        <Typography>{(doc.extraction.confidence?doc.extraction.confidence*100:0)+"%" || 'N/A'}</Typography>
+                      </Grid>
                     </Grid>
                   )}
 
@@ -81,6 +97,15 @@ export const DocumentList = ({ documents }: Props) => {
             </Box>
           ))}
         </List>
+        <Dialog 
+          open={Boolean(selectedDoc)} 
+          onClose={handleClose}
+        >
+          <DialogTitle>{selectedDoc?.name}</DialogTitle>
+          <DialogContent>
+            {selectedDoc?.extraction?.content}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

@@ -4,6 +4,7 @@ export interface AiExtraction {
   licenseNumber?: string;
   holderName?: string;
   confidence?: number;
+  content?: string;
 }
 
 export interface DocumentItem {
