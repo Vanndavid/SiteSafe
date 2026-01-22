@@ -1,7 +1,50 @@
 import request from 'supertest';
+
+// --- 2. MOCK S3 UPLOAD (Multer) ---
+// Crucial: We create a "Spy" middleware.
+// This allows us to change behavior per test (fail vs success).
+const mockMulterMiddleware = jest.fn((req: any, res: any, next: any) => {
+  next();
+});
+
+jest.mock('../config/s3uploader', () => ({
+  __esModule: true,
+  default: {
+    // When the route calls upload.single('document'), return our spy
+    single: () => mockMulterMiddleware 
+  }
+}));
+
 import app from '../server';
 import mongoose from 'mongoose';
 import DocumentModel from '../models/Document';
+
+// 1. SILENCE THE SCHEDULER (Prevents background DB calls)
+jest.mock('../services/scheduler', () => ({
+  checkExpiringDocuments: jest.fn(),
+  startScheduler: jest.fn() 
+}));
+
+// 2. SILENCE REDIS (Prevents the ENOTFOUND error)
+jest.mock('../config/redis', () => ({
+  __esModule: true,
+  default: {
+    host: 'localhost',
+    port: 6379,
+    lazyConnect: true // This tells the code "Don't connect until I ask"
+  }
+}));
+
+// 3. SILENCE THE QUEUE WORKER (Prevents BullMQ from starting)
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn(),
+    on: jest.fn(),
+  })),
+  Worker: jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+  })),
+}));
 
 // --- 1. MOCK AUTH (Clerk) ---
 // Bypass real authentication
@@ -17,20 +60,7 @@ jest.mock('@clerk/express', () => ({
   getAuth: () => ({ userId: 'test_user_123' }),
 }));
 
-// --- 2. MOCK S3 UPLOAD (Multer) ---
-// Crucial: We create a "Spy" middleware.
-// This allows us to change behavior per test (fail vs success).
-const mockMulterMiddleware = jest.fn((req: any, res: any, next: any) => {
-  next();
-});
 
-jest.mock('../config/s3Upload', () => ({
-  __esModule: true,
-  default: {
-    // When the route calls upload.single('document'), return our spy
-    single: () => mockMulterMiddleware 
-  }
-}));
 
 // --- 3. MOCK QUEUE (BullMQ or SQS) ---
 // Prevent connecting to real Redis or AWS SQS during tests

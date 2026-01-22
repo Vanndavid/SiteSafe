@@ -24,7 +24,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
   const fileData = req.file as any; 
   console.log('File uploaded to S3 with key:', fileData);
   // const { userId } = getAuth(req); // Keeping your Auth logic
-  const userId = "test-user-123"; // TEMP: Use a dummy string if Auth isn't set up yet
+  const userId = "test_user_123"; // TEMP: Use a dummy string if Auth isn't set up yet
 
   console.log('Fetching documents for user:', userId);
   
