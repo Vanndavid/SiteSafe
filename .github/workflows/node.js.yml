@@ -50,3 +50,7 @@ jobs:
         REDIS_PORT: 6379
         CLERK_SECRET_KEY: mock_key_for_ci
         GEMINI_API_KEY: mock_key_for_ci
+        AWS_BUCKET_NAME: dummy-bucket
+        AWS_REGION: ap-southeast-2
+        AWS_ACCESS_KEY_ID: dummy-key
+        AWS_SECRET_ACCESS_KEY: dummy-secret
