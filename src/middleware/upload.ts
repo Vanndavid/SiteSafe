@@ -1,4 +1,4 @@
-// Not in use. Change to s3uploader.ts
+// this is local storage multer middleware, this will be replaced by S3 uploader later, see src/config/s3uploader.ts
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';

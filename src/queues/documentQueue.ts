@@ -1,3 +1,4 @@
+// this is local queue using BullMQ and Redis, this will be replaced by SQS later. see src/queues/sqsProducer.ts
 import { Queue } from 'bullmq';
 import connection from '../config/redis';
 

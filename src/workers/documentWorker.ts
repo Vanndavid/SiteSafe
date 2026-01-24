@@ -1,3 +1,5 @@
+// this is local worker using BullMQ and Redis, this will be replaced by SQS worker later. see src/workers/sqsWorker.ts
+
 import { Worker } from 'bullmq';
 import connection from '../config/redis';
 import { DOCUMENT_QUEUE_NAME } from '../queues/documentQueue';
