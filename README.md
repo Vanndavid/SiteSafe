@@ -176,9 +176,15 @@ Using queues allows:
 - [x] Notification  
 **Goal:** End-to-end usable prototype
 
+### Phase 4 – Cloud
+- [x] S3 (replace local storage)
+- [x] SQS (replace queue and redis)
+- [x] Lambda (replace worker) 
+**Goal:** Utilzing cloud services
+
 ### Phase 5 – The "SaaS" Architecture
-- [ ] Test Case
-- [ ] Authentication (Clerk)
+- [x] Test Case
+- [x] Authentication (Clerk)
 - [ ] Multi-Tenancy (Organization and team members)
 - [ ] Payments (Stripe)
 **Goal:** Transform it from a "Single-Player Demo" into a "Multi-User Platform" ready for paying customers.
@@ -250,6 +256,17 @@ Integrations
 git clone https://github.com/Vanndavid/AiCompliance.git
 cd AiCompliance
 docker-compose up -d --build
+
+# At this point, the application has evolved to using AWS services, so to setup local development
+# 1. Uncomment redis, mongodb, worker, in docker-compose.yml to use them
+# 2. You need to point the API to use local drivers instead of AWS SDKs in api.ts
+#    // src/routes/api.ts
+#    // import { upload } from "../middleware/uploadMiddleware"; // AWS S3 ☁️
+#    import { upload } from "../middleware/uploadLocal";         // Local Disk 💻
+# 3. Queue Driver (src/controllers/documentController.ts) Switch the job producer from SQS to BullMQ:
+#    // src/controllers/documentController.ts
+#    // import { addDocumentJob } from "../queues/sqsProducer";   // AWS SQS ☁️
+#    import { addDocumentJob } from "../queues/documentQueue";  // Redis BullMQ 💻
 
 # go to http://localhost:5173/
 

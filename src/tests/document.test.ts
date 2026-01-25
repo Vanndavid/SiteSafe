@@ -68,6 +68,11 @@ jest.mock('../queues/documentQueue', () => ({
   addDocumentJob: jest.fn().mockResolvedValue({ id: 'mock-job-id' }) // Fake success
 }));
 
+// B. Mock the Cloud Queue (SQS) - THIS STOPS THE AWS ERROR
+jest.mock('../queues/sqsProducer', () => ({
+  addDocumentJob: jest.fn().mockResolvedValue({ MessageId: 'mock-sqs-id' })
+}));
+
 // --- TEST SETUP ---
 beforeAll(async () => {
   // Ensure we are connected to a TEST DB (not production)

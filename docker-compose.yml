@@ -24,7 +24,7 @@ services:
     depends_on:
       - mongo
 
-  # Queue Service (Required for Day 5)
+  # Queue Service
   redis:
     image: redis:alpine
     container_name: aicompliance_redis

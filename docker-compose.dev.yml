@@ -1,14 +1,15 @@
 services:
   # Database
-  mongo:
-    image: mongo:latest
-    container_name: aicompliance_mongo
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    networks: [web]
+  # using atlas
+  # mongo:
+  #   image: mongo:latest
+  #   container_name: aicompliance_mongo
+  #   restart: always
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo_data:/data/db
+  #   networks: [web]
 
   # Database GUI (View at http://localhost:8081)
   mongo-express:
@@ -24,14 +25,15 @@ services:
       - mongo
     networks: [web]
 
-  # Queue Service (Required for Day 5)
-  redis:
-    image: redis:alpine
-    container_name: aicompliance_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    networks: [web]
+  # Queue Service
+  # replaced by sqs
+  # redis:
+  #   image: redis:alpine
+  #   container_name: aicompliance_redis
+  #   restart: always
+  #   ports:
+  #     - "6379:6379"
+  #   networks: [web]
   # ✅ Backend (DEV mode)
   backend:
     image: node:20-alpine
@@ -59,20 +61,21 @@ services:
       - "traefik.http.routers.aicompliance-api.entrypoints=web"
       - "traefik.http.services.aicompliance-api.loadbalancer.server.port=3000"
 
-  worker:
-    image: node:20-alpine
-    container_name: aicompliance_worker
-    working_dir: /app
-    volumes:
-      - .:/app
-    command: npx tsx src/workers/documentWorker.ts
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - mongo
-    restart: unless-stopped
-    networks: [web]
+  # replaced by lambda worker
+  # worker:
+  #   image: node:20-alpine
+  #   container_name: aicompliance_worker
+  #   working_dir: /app
+  #   volumes:
+  #     - .:/app
+  #   command: npx tsx src/workers/documentWorker.ts
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - redis
+  #     - mongo
+  #   restart: unless-stopped
+  #   networks: [web]
   frontend:
     
     image: node:20-alpine

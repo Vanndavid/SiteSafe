@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import DocumentModel from '../models/Document';
-import { addDocumentJob } from '../queues/documentQueue';
+// import { addDocumentJob } from '../queues/documentQueue';
+import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
 import NotificationModel from '../models/Notification';
 
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";

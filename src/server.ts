@@ -6,6 +6,16 @@ import apiRoutes from './routes/api';
 import { startScheduler } from './services/scheduler';
 import { clerkMiddleware } from '@clerk/express'
 dotenv.config();
+// // Automatic Switching based on .env
+// const isCloud = process.env.USE_CLOUD === 'true';
+
+// export const uploadMiddleware = isCloud 
+//   ? require("../middleware/uploadMiddleware").upload 
+//   : require("../middleware/uploadLocal").upload;
+
+// export const jobProducer = isCloud
+//   ? require("../queues/sqsProducer").addDocumentJob
+//   : require("../queues/documentQueue").addDocumentJob;
 
 // --- CONNECT TO DATABASE ---
 connectDB(); 
