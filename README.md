@@ -192,7 +192,6 @@ Using queues allows:
 ### Phase 6 – The "Final" Polish
 - [ ] Landing Page
 - [ ] Email/Phone Notifications
-- [ ] Cloud Storage
 **Goal:** Make it look production-ready
 
 ---
