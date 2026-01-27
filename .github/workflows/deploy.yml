@@ -27,6 +27,7 @@ jobs:
             cd /home/ubuntu/traefik-projects/AiCompliance
 
             # 2. Pull latest code
+            git stash
             git pull origin main
 
             # 3. Install dependencies and build
