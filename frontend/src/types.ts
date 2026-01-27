@@ -1,5 +1,5 @@
 export interface AiExtraction {
-  type?: string;
+  docType?: string;
   expiryDate?: string;
   licenseNumber?: string;
   holderName?: string;

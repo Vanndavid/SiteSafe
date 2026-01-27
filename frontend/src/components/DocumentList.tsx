@@ -109,7 +109,7 @@ export const DocumentList = ({ documents }: Props) => {
                       </Grid>
                       <Grid>
                         <Typography variant="caption">Type</Typography>
-                        <Typography>{doc.extraction.type || 'N/A'}</Typography>
+                        <Typography>{doc.extraction.docType || 'N/A'}</Typography>
                       </Grid>
                        <Grid>
                         <Typography variant="caption">Confident</Typography>

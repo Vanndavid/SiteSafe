@@ -67,7 +67,7 @@ export default function App() {
       } catch (err) {
         console.error('Polling error', err);
       }
-    }, 2000);
+    }, 5000);
   };
 
   const handleNotificationRead = (id: string) => {
