@@ -185,6 +185,7 @@ Using queues allows:
 ### Phase 5 – The "SaaS" Architecture
 - [x] Test Case
 - [x] Authentication (Clerk)
+- [ ] WebSocket
 - [ ] Multi-Tenancy (Organization and team members)
 - [ ] Payments (Stripe)
 **Goal:** Transform it from a "Single-Player Demo" into a "Multi-User Platform" ready for paying customers.
