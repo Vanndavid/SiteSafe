@@ -1,7 +1,7 @@
 import { AppBar, Toolbar, Typography, Button } from '@mui/material';
 import SecurityIcon from '@mui/icons-material/Security';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-
+import { AutoLoginButton } from './AutoLoginButton';
 export const Header = () => {
   return (
     <AppBar position="static" sx={{ backgroundColor: '#0F172A' }}>
@@ -12,11 +12,12 @@ export const Header = () => {
         </Typography>
         {/* <Button color="inherit">Login</Button> */}
         <SignedOut>
-           <SignInButton mode="modal">
+           {/* <SignInButton mode="modal">
             <Button style={{ color: 'white' }}>
               Sign In
             </Button>
-          </SignInButton>
+          </SignInButton> */}
+          <AutoLoginButton />
         </SignedOut>
         <SignedIn>
           <UserButton />

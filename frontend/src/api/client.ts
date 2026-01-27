@@ -10,7 +10,6 @@ export const api = axios.create({
 // Helper to inject the token globally
 export const setAuthToken = (token: string | null) => {
   if (token) {
-    console.log("Setting token in client.ts:", token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   } else {
     delete api.defaults.headers.common['Authorization'];
