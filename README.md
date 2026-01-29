@@ -191,7 +191,7 @@ Using queues allows:
 **Goal:** Transform it from a "Single-Player Demo" into a "Multi-User Platform" ready for paying customers.
 
 ### Phase 6 – The "Final" Polish
-- [ ] Landing Page
+- [x] Landing Page
 - [ ] Email/Phone Notifications
 **Goal:** Make it look production-ready
 
