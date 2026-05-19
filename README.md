@@ -1,5 +1,5 @@
 # Ai Compliance 
-### AI-Assisted Compliance Monitoring for Construction & Trade Sites
+### AI-Assisted Compliance
 
 **Ai Compliance** is a prototype internal compliance tool designed for organisations that manage time-sensitive documents such as licenses, certifications, permits, or insurance policies.
 
