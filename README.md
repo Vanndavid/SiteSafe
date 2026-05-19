@@ -163,6 +163,32 @@ Using queues allows:
 
 ---
 
+## Trade-offs
+
+Design decisions here are deliberate compromises between speed-to-value for a prototype and long-run operational rigidity.
+
+### AI extraction vs OCR or manual rules
+**Gains:** Handles messy scans, handwritten fields, and layout variety that brittle parsers miss.  
+**Costs:** Higher per-document cost and latency than pure OCR, nondeterministic edge cases, and a need for human override and monitoring. Regulatory liability still sits with humans, not the model.
+
+### Document database (MongoDB) vs relational SQL
+**Gains:** Heterogeneous document types can evolve without migration churn; easy to attach semi-structured AI output.  
+**Costs:** Fewer enforced cross-entity constraints at the DB layer; complex reporting and strict audit schemas may eventually push toward clearer boundaries or complementary stores.
+
+### Asynchronous workers vs synchronous API responses
+**Gains:** APIs stay fast and tolerant of slow or flaky AI and messaging providers; workers can retry and scale out.  
+**Costs:** Stronger reliance on queues, observability, and idempotent jobs—users see eventual consistency until processing finishes.
+
+### Cloud queue & object storage vs Redis and local disks
+**Gains:** Durable uploads, managed scaling, and a path to production-aligned deployments.  
+**Costs:** More moving pieces, credentials, and local-dev setup than an all-on-one-machine stack; tighter coupling to a cloud provider unless abstractions stay thin.
+
+### Prototype breadth vs enterprise controls
+**Gains:** The core workflow (upload → extract → track → remind) ships first with hosted auth and billing scaffolding.  
+**Costs:** Subscription state syncing, granular entitlements, org-wide tenancy, and full notification hardening remain follow-on work—not hidden, but consciously deferred.
+
+---
+
 ## Development Roadmap
 
 ### Phase 1 – AI Core
