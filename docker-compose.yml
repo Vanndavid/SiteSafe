@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # Database
@@ -54,7 +53,7 @@ services:
     working_dir: /app
     volumes:
       - .:/app
-    command: npx tsx src/workers/documentWorker.ts
+    command: sh -c "npm install && npx tsx src/workers/documentWorker.ts"
     env_file:
       - .env
     depends_on:

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-// import { upload } from '../middleware/upload';
-import upload from "../config/s3uploader"
+import { upload } from '../middleware/upload';
+// import upload from "../config/s3uploader"
 import { createCheckoutSession } from '../controllers/billingController';
 import { checkHealth, getDocumentStatus, getAllDocuments, getDocumentOverview, uploadDocument, getNotifications, markAsRead, downloadDocument, searchDocuments } from '../controllers/documentController';
 

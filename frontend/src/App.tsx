@@ -194,12 +194,12 @@ export default function App() {
               Download Sample
             </Button>
           </Typography>
-          <BillingCard
+          {/* <BillingCard
             error={billingError}
             loading={billingLoading}
             onCheckout={handleBillingCheckout}
             status={billingStatus}
-          />
+          /> */}
           <Paper sx={{ p: 3, mb: 3, border: '1px solid #e0e0e0' }}>
             <Stack spacing={2}>
               <Typography variant="h6" fontWeight="bold">
