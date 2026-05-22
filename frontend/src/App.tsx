@@ -25,7 +25,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchSummary, setSearchSummary] = useState<string | null>(null);
-  // auth token
+  // Auth token handling policy:
+  // - Do not persist auth tokens in localStorage/sessionStorage.
+  // - Do not log tokens to console.
+  // Token is fetched from Clerk and attached to API requests at runtime.
   const { getToken, isSignedIn } = useAuth();
   useEffect(() => {
     const setupApi = async () => {
