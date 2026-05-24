@@ -17,5 +17,5 @@ export const addDocumentJob = async (docId: string, filePath: string, mimeType: 
     filePath,
     mimeType
   });
-  console.log(`📥 Job added to queue: ${docId}`);
+  console.log(`Job added to queue: ${docId}`);
 };

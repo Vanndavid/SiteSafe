@@ -18,12 +18,12 @@ const sqsClient = new SQSClient({
 const QUEUE_URL = process.env.SQS_QUEUE_URL!;
 
 export const startWorker = async () => {
-  console.log("👷 SQS Worker Started. Listening for jobs...");
+  console.log("SQS worker started. Listening for jobs...");
 
   // Ensure DB is connected (Reuse your existing logic)
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(process.env.MONGODB_URI!);
-    console.log("✅ Worker Connected to MongoDB");
+    console.log("Worker connected to MongoDB");
   }
 
   // 2. The Infinite Loop (Replaces 'new Worker')
@@ -47,7 +47,7 @@ export const startWorker = async () => {
       const message:any = Messages[0];
       const receiptHandle = message.ReceiptHandle;
       
-      console.log(`⚙️ Processing Message ID: ${message.MessageId}`);
+      console.log(`Processing message ID: ${message.MessageId}`);
 
       // --- YOUR ORIGINAL LOGIC STARTS HERE ---
       try {
@@ -62,7 +62,7 @@ export const startWorker = async () => {
 
         // 2. Analyze with Gemini (Exactly as before)
         const aiResult = await analyzeDocument(filePath, mimeType);
-        console.log(`🧠 AI Analysis Complete for ${docId}`);
+        console.log(`AI analysis complete for ${docId}`);
 
         // 3. Update Database (Exactly as before)
         const updatedDoc = await DocumentModel.findByIdAndUpdate(
@@ -81,7 +81,7 @@ export const startWorker = async () => {
           { new: true }
         );
 
-        console.log(`✅ Document updated: ${updatedDoc?._id}`);
+        console.log(`Document updated: ${updatedDoc?._id}`);
 
         // 4. DELETE Message (Success!)
         // SQS doesn't auto-delete. We must tell it we are done.
@@ -89,11 +89,11 @@ export const startWorker = async () => {
           QueueUrl: QUEUE_URL,
           ReceiptHandle: receiptHandle
         }));
-        console.log("🗑️ Job removed from Queue");
+        console.log("Job removed from queue");
 
       } catch (processingError) {
         // --- ERROR HANDLING (From your old code) ---
-        console.error(`❌ Job Failed:`, processingError);
+        console.error(`Job failed:`, processingError);
 
         // Mark DB as failed
         const body = JSON.parse(message.Body!); // Re-parse safely to get ID
@@ -109,7 +109,7 @@ export const startWorker = async () => {
       // --- END ORIGINAL LOGIC ---
 
     } catch (networkError) {
-      console.error("❌ SQS Network Error:", networkError);
+      console.error("SQS network error:", networkError);
       // Wait 5s before retrying connection to avoid spamming logs
       await new Promise(resolve => setTimeout(resolve, 5000));
     }

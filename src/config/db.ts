@@ -12,9 +12,9 @@ const connectDB = async () => {
     // 2. Open the Connection
     await mongoose.connect(dbName);
     
-    console.log(`✅ MongoDB Connected to: ${dbName}`);
+    console.log(`MongoDB connected to: ${dbName}`);
   } catch (error) {
-    console.error('❌ MongoDB Connection Failed:', error);
+    console.error('MongoDB connection failed:', error);
     // Stop the app if DB is dead
     process.exit(1);
   }

@@ -27,11 +27,11 @@ export const addDocumentJob = async (docId: string, fileKey: string, mimeType: s
     });
 
     const response = await sqsClient.send(command);
-    console.log(`✅ Job sent to AWS SQS! MessageId: ${response.MessageId}`);
+    console.log(`Job sent to AWS SQS. MessageId: ${response.MessageId}`);
     return response;
 
   } catch (error) {
-    console.error("❌ Failed to send job to SQS:", error);
+    console.error("Failed to send job to SQS:", error);
     throw error;
   }
 };

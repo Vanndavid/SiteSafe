@@ -34,7 +34,7 @@ export const analyzeDocument = async (filePathOrKey: string, mimeType: string) =
     // 2. LOGIC: Check if file is in S3 or Local
     // If it starts with 'uploads/' and does NOT exist locally, fetch from S3
     if (filePathOrKey.startsWith("uploads/") && !fs.existsSync(filePathOrKey)) {
-        console.log(`☁️ Fetching from S3: ${filePathOrKey}`);
+        console.log(`Fetching from S3: ${filePathOrKey}`);
         
         const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
@@ -45,13 +45,13 @@ export const analyzeDocument = async (filePathOrKey: string, mimeType: string) =
             const s3Response = await s3.send(command);
             fileBuffer = await streamToBuffer(s3Response.Body);
         } catch (s3Error) {
-            console.error("❌ S3 Download Error:", s3Error);
+            console.error("S3 download error:", s3Error);
             throw new Error(`Could not find file in S3: ${filePathOrKey}`);
         }
 
     } else {
         // Fallback: Read from Local Disk (Legacy/Dev mode)
-        console.log(`💻 Reading from Local Disk: ${filePathOrKey}`);
+        console.log(`Reading from local disk: ${filePathOrKey}`);
         if (!fs.existsSync(filePathOrKey)) throw new Error(`File not found locally: ${filePathOrKey}`);
         fileBuffer = fs.readFileSync(filePathOrKey);
     }
