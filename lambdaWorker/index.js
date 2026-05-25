@@ -14,7 +14,7 @@ const pool = new Pool({
 
 // --- 3. HELPER: Download from S3 (From geminiService.ts) ---
 async function getFileFromS3(bucket, key) {
-  console.log(`☁️ Fetching from S3: ${key}`);
+  console.log(`Fetching from S3: ${key}`);
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
   const response = await s3.send(command);
   
@@ -29,7 +29,7 @@ async function getFileFromS3(bucket, key) {
 
 // --- 4. THE LAMBDA HANDLER (From documentWorker.ts) ---
 exports.handler = async (event) => {
-  console.log(`🚀 Lambda Woke Up. Processing ${event.Records.length} records.`);
+  console.log(`Lambda started. Processing ${event.Records.length} records.`);
 
   // A. Connect to PostgreSQL (Reuse connection)
   // In a real Lambda environment, you might want to manage the connection pool differently
@@ -47,7 +47,7 @@ exports.handler = async (event) => {
       const key = body.key;      // S3 Key
       const mimeType = body.mimeType;
 
-      console.log(`⚙️ Processing Job: ${docId}`);
+      console.log(`Processing job: ${docId}`);
 
       // 2. Download File (Logic from geminiService)
       // Note: We use the bucket name from ENV, or assume the key is relative
@@ -91,7 +91,7 @@ exports.handler = async (event) => {
       const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
       const aiResult = JSON.parse(cleanJson);
 
-      console.log(`🧠 AI Analysis Complete for ${docId}`);
+      console.log(`AI analysis complete for ${docId}`);
 
       // 6. Update Database (Logic from documentWorker.ts)
       await pool.query(
@@ -114,10 +114,10 @@ exports.handler = async (event) => {
         ]
       );
 
-      console.log(`✅ Document updated: ${docId}`);
+      console.log(`Document updated: ${docId}`);
 
     } catch (error) {
-      console.error(`❌ Job Failed ${docId}:`, error);
+      console.error(`Job failed ${docId}:`, error);
 
       // Mark DB as failed (Logic from documentWorker.ts)
       if (docId) {

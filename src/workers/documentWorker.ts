@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-console.log('👷 Document Worker Started. Waiting for jobs...');
+console.log('Document Worker Started. Waiting for jobs...');
 
 // Define the shape of the Job Data for TypeScript
 interface DocumentJobData {
@@ -19,7 +19,7 @@ interface DocumentJobData {
 }
 
 export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (job) => {
-  console.log(`⚙️ Processing Job ${job.id}: ${job.data.docId}`);
+  console.log(`Processing job ${job.id}: ${job.data.docId}`);
 
   try {
     // Explicitly destructure with types
@@ -27,7 +27,7 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
 
     // 1. Analyze with Gemini
     const aiResult = await analyzeDocument(filePath, mimeType);
-    console.log(`🧠 AI Analysis Complete for ${docId}`);
+    console.log(`AI analysis complete for ${docId}`);
 
     // 2. Update Database
     const updatedDoc = await prisma.document.update({
@@ -45,11 +45,11 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
       },
     });
 
-    console.log(`✅ Document updated: ${updatedDoc?.id}`);
+    console.log(`Document updated: ${updatedDoc?.id}`);
     return aiResult;
 
   } catch (error) {
-    console.error(`❌ Job Failed ${job.id}:`, error);
+    console.error(`Job failed ${job.id}:`, error);
     
     // Mark DB as failed
     if (job.data.docId) {

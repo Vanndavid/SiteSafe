@@ -8,7 +8,8 @@ const connectDB = async () => {
     await prisma.$connect();
     console.log('PostgreSQL connected');
   } catch (error) {
-    console.error('PostgreSQL connection failed:', error);
+    console.error('MongoDB Connection Failed:', error);
+    // Stop the app if DB is dead
     process.exit(1);
   }
 };
