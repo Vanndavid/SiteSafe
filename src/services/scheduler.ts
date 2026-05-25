@@ -54,7 +54,7 @@ const checkExpiringDocuments = async () => {
                 userId: doc.userId,
               },
             });
-            console.log(`🔔 Generated Alert for ${doc._id}`);
+            console.log(`Generated Alert for ${doc.id}`);
           }
         }
       }
