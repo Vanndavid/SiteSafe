@@ -1,14 +1,27 @@
 services:
   # Database
   # using atlas
-  mongo:
-    image: mongo:6
-    container_name: aicompliance_mongo
-    restart: always
-    volumes:
-      - mongo_data:/data/db
-    networks: [web]
+  # mongo:
+  #   image: mongo:6
+  #   container_name: aicompliance_mongo
+  #   restart: always
+  #   volumes:
+  #     - mongo_data:/data/db
+  #   networks: [web]
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: aicompliance_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aicompliance
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [web]
   # Database GUI (View at http://localhost:8081)
   # mongo-express:
   #   image: mongo-express
@@ -40,8 +53,8 @@ services:
     #   - "3000:3000"
     env_file:
       - .env
-    # depends_on:
-    #   - mongo
+    depends_on:
+      - postgres
     #   - redis
     restart: unless-stopped
     # traefik
@@ -89,7 +102,7 @@ services:
       - "traefik.http.services.aicompliance-frontend.loadbalancer.server.port=5173"
 
 volumes:
-  mongo_data:
+  postgres_data:
 
 networks:
   web:
