@@ -1,6 +1,6 @@
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { GoogleGenAI } = require("@google/genai");
-const mongoose = require("mongoose");
+const { Pool } = require("pg");
 
 // --- 1. SETUP CLIENTS (From geminiService.ts) ---
 const s3 = new S3Client({
@@ -8,26 +8,9 @@ const s3 = new S3Client({
 });
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// --- 2. DEFINE SCHEMA (From models/Document.ts) ---
-// We define this inline because Lambda can't see your 'models' folder
-const DocumentSchema = new mongoose.Schema({
-  status: String,
-  extractedData: {
-    docType: String,
-    expiryDate: String,
-    licenseNumber: String,
-    holderName: String,
-    confidence: Number,
-    content: String
-  },
-  aiSummary: String // If you use this field
-}, { strict: false });
-
-const DocumentModel = mongoose.model("Document", DocumentSchema);
-
-// Cache the DB connection so we don't reconnect on every single message
-let isConnected = false;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 // --- 3. HELPER: Download from S3 (From geminiService.ts) ---
 async function getFileFromS3(bucket, key) {
@@ -48,12 +31,10 @@ async function getFileFromS3(bucket, key) {
 exports.handler = async (event) => {
   console.log(`🚀 Lambda Woke Up. Processing ${event.Records.length} records.`);
 
-  // A. Connect to MongoDB (Reuse connection)
-  if (!isConnected) {
-    await mongoose.connect(process.env.MONGODB_URI);
-    isConnected = true;
-    console.log("✅ Worker Connected to MongoDB");
-  }
+  // A. Connect to PostgreSQL (Reuse connection)
+  // In a real Lambda environment, you might want to manage the connection pool differently
+  // This is a simplified approach for demonstration purposes
+
 
   // B. Loop through SQS Messages (Replacing the BullMQ 'Worker' loop)
   for (const record of event.Records) {
@@ -113,17 +94,25 @@ exports.handler = async (event) => {
       console.log(`🧠 AI Analysis Complete for ${docId}`);
 
       // 6. Update Database (Logic from documentWorker.ts)
-      await DocumentModel.findByIdAndUpdate(docId, {
-        status: "processed",
-        extractedData: {
-          docType: aiResult.type,          // Mapped from 'type'
-          expiryDate: aiResult.expiryDate,
-          licenseNumber: aiResult.licenseNumber,
-          holderName: aiResult.name,
-          confidence: aiResult.confidence,
-          content: aiResult.content
-        }
-      });
+      await pool.query(
+        `
+        UPDATE "Document"
+        SET status = $1, "extractedData" = $2
+        WHERE id = $3
+        `,
+        [
+          "processed",
+          JSON.stringify({
+            docType: aiResult.type,
+            expiryDate: aiResult.expiryDate,
+            licenseNumber: aiResult.licenseNumber,
+            holderName: aiResult.name,
+            confidence: aiResult.confidence,
+            content: aiResult.content,
+          }),
+          docId,
+        ]
+      );
 
       console.log(`✅ Document updated: ${docId}`);
 
@@ -132,7 +121,17 @@ exports.handler = async (event) => {
 
       // Mark DB as failed (Logic from documentWorker.ts)
       if (docId) {
-        await DocumentModel.findByIdAndUpdate(docId, { status: "failed" });
+        await pool.query(
+          `
+          UPDATE "Document"
+          SET status = $1
+          WHERE id = $2
+          `,
+          [
+            "failed",
+            docId
+          ]
+        );
       }
       
       // OPTIONAL: If you want SQS to retry the message later (e.g. API limit), 

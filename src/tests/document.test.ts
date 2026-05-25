@@ -16,8 +16,7 @@ jest.mock('../config/s3uploader', () => ({
 }));
 
 import app from '../server';
-import mongoose from 'mongoose';
-import DocumentModel from '../models/Document';
+import prisma from '../config/prisma';
 
 // 1. SILENCE THE SCHEDULER (Prevents background DB calls)
 jest.mock('../services/scheduler', () => ({
@@ -77,11 +76,11 @@ jest.mock('../queues/sqsProducer', () => ({
 beforeAll(async () => {
   // Ensure we are connected to a TEST DB (not production)
   // Ideally, process.env.MONGODB_URI should be set to a test URL in package.json
-  await DocumentModel.deleteMany({}); 
+  await prisma.document.deleteMany({});
 });
 
 afterAll(async () => {
-  await mongoose.connection.close();
+  await prisma.$disconnect();
 });
 
 describe('Document API Endpoints', () => {
@@ -133,7 +132,7 @@ describe('Document API Endpoints', () => {
     uploadedDocId = res.body.file.id;
 
     // Verify DB Record
-    const dbRecord = await DocumentModel.findById(uploadedDocId);
+    const dbRecord = await prisma.document.findUnique({ where: { id: uploadedDocId } });
     expect(dbRecord).toBeTruthy();
     expect(dbRecord?.userId).toBe('test_user_123');
     expect(dbRecord?.status).toBe('pending');
@@ -153,34 +152,38 @@ describe('Document API Endpoints', () => {
     const expirySoon = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const expiryLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    await DocumentModel.create({
-      originalName: 'health-insurance-policy.pdf',
-      storagePath: 'uploads/health-insurance-policy.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Health Insurance',
-        expiryDate: expirySoon,
-        licenseNumber: 'HI-123',
-        holderName: 'Jane Citizen',
-        content: 'Health insurance renewal notice for corporate workers',
-      },
+    await prisma.document.create({
+      data: {
+        originalName: 'health-insurance-policy.pdf',
+        storagePath: 'uploads/health-insurance-policy.pdf',
+        mimeType: 'application/pdf',
+        status: 'processed',
+        userId: 'test_user_123',
+        extractedData: {
+          docType: 'Health Insurance',
+          expiryDate: expirySoon,
+          licenseNumber: 'HI-123',
+          holderName: 'Jane Citizen',
+          content: 'Health insurance renewal notice for corporate workers',
+        },
+      }
     });
 
-    await DocumentModel.create({
-      originalName: 'health-insurance-long-term.pdf',
-      storagePath: 'uploads/health-insurance-long-term.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Health Insurance',
-        expiryDate: expiryLater,
-        licenseNumber: 'HI-456',
-        holderName: 'John Citizen',
-        content: 'Health insurance policy with a later renewal date',
-      },
+    await prisma.document.create({
+      data: {
+        originalName: 'health-insurance-long-term.pdf',
+        storagePath: 'uploads/health-insurance-long-term.pdf',
+        mimeType: 'application/pdf',
+        status: 'processed',
+        userId: 'test_user_123',
+        extractedData: {
+          docType: 'Health Insurance',
+          expiryDate: expiryLater,
+          licenseNumber: 'HI-456',
+          holderName: 'John Citizen',
+          content: 'Health insurance policy with a later renewal date',
+        },
+      }
     });
 
     const res = await request(app)
@@ -209,40 +212,46 @@ describe('Document API Endpoints', () => {
     const expiringSoon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const validDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    await DocumentModel.create({
-      originalName: 'expired-trade-license.pdf',
-      storagePath: 'uploads/expired-trade-license.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Trade License',
-        expiryDate: expiredDate,
-      },
+    await prisma.document.create({
+      data: {
+        originalName: 'expired-trade-license.pdf',
+        storagePath: 'uploads/expired-trade-license.pdf',
+        mimeType: 'application/pdf',
+        status: 'processed',
+        userId: 'test_user_123',
+        extractedData: {
+          docType: 'Trade License',
+          expiryDate: expiredDate,
+        },
+      }
     });
 
-    await DocumentModel.create({
-      originalName: 'expiring-soon-white-card.pdf',
-      storagePath: 'uploads/expiring-soon-white-card.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'White Card',
-        expiryDate: expiringSoon,
-      },
+    await prisma.document.create({
+      data: {
+        originalName: 'expiring-soon-white-card.pdf',
+        storagePath: 'uploads/expiring-soon-white-card.pdf',
+        mimeType: 'application/pdf',
+        status: 'processed',
+        userId: 'test_user_123',
+        extractedData: {
+          docType: 'White Card',
+          expiryDate: expiringSoon,
+        },
+      }
     });
 
-    await DocumentModel.create({
-      originalName: 'long-valid-insurance.pdf',
-      storagePath: 'uploads/long-valid-insurance.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Insurance',
-        expiryDate: validDate,
-      },
+    await prisma.document.create({
+      data: {
+        originalName: 'long-valid-insurance.pdf',
+        storagePath: 'uploads/long-valid-insurance.pdf',
+        mimeType: 'application/pdf',
+        status: 'processed',
+        userId: 'test_user_123',
+        extractedData: {
+          docType: 'Insurance',
+          expiryDate: validDate,
+        },
+      }
     });
 
     const res = await request(app)

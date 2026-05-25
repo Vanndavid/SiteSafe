@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import DocumentModel from '../models/Document';
 // import { addDocumentJob } from '../queues/documentQueue';
 import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
-import NotificationModel from '../models/Notification';
+import prisma from '../config/prisma';
+import type { ExtractedDocumentData } from '../models/Document';
 
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -118,20 +118,21 @@ export const uploadDocument = async (req: Request, res: Response) => {
     console.log(`Received file key: ${fileData.key}`); 
 
     // 3. Create DB Record
-    const newDoc = await DocumentModel.create({
-      originalName: fileData.originalname,
-      // IMPORTANT: Save the S3 Key (e.g., "uploads/123.pdf"), NOT the full URL
-      storagePath: fileData.key, 
-      mimeType: fileData.mimetype,
-      status: 'pending',
-      userId: userId,
+    const newDoc = await prisma.document.create({
+      data: {
+        originalName: fileData.originalname,
+        storagePath: fileData.key,
+        mimeType: fileData.mimetype,
+        status: 'pending',
+        userId,
+      },
     });
 
     // 4. Dispatch Job to Queue
     // We pass the S3 Key so the Worker (or Lambda) can find it later
     // Ensure addDocumentJob accepts the key!
     if (typeof addDocumentJob === 'function') {
-        await addDocumentJob(newDoc._id as unknown as string, newDoc.storagePath, newDoc.mimeType);
+        await addDocumentJob(newDoc.id as unknown as string, newDoc.storagePath, newDoc.mimeType);
     }
 
     // 5. Success Response
@@ -139,7 +140,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
       success: true,
       message: 'Upload accepted. Processing in background.',
       file: {
-        id: newDoc._id,
+        id: newDoc.id,
         originalName: newDoc.originalName,
         status: 'pending',
         key: newDoc.storagePath // Useful for debugging
@@ -159,7 +160,14 @@ export const uploadDocument = async (req: Request, res: Response) => {
 // GET /api/document/:id
 export const getDocumentStatus = async (req: Request, res: Response) => {
   try {
-    const doc = await DocumentModel.findById(req.params.id);
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const doc = await prisma.document.findUnique({
+      where: { id },
+    });
     if (!doc) {
       return res.status(404).json({ error: 'Document not found' });
     }
@@ -178,13 +186,14 @@ export const getDocumentStatus = async (req: Request, res: Response) => {
 export const getAllDocuments = async (req: Request, res: Response) => {
   try {
     // Get last 20 docs, newest first
-    const docs = await DocumentModel.find()
-      .sort({ uploadDate: -1 })
-      .limit(20);
+    const docs = await prisma.document.findMany({
+      orderBy: { uploadDate: 'desc' },
+      take: 20,
+    });
 
     // Map to frontend format
     const formattedDocs = docs.map(doc => ({
-      id: doc._id,
+      id: doc.id,
       name: doc.originalName,
       status: doc.status,
       storagePath: doc.storagePath,
@@ -203,7 +212,10 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
     const expiringWithinDays = parsePositiveInt(req.query.expiringWithinDays, 30);
     const limit = parsePositiveInt(req.query.limit, 5);
 
-    const docs = await DocumentModel.find().sort({ uploadDate: -1 }).limit(500);
+    const docs = await prisma.document.findMany({
+      orderBy: { uploadDate: 'desc' },
+      take: 500,
+    });
 
     const totals = {
       total: docs.length,
@@ -217,7 +229,7 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
     };
 
     const expiringDocuments: Array<{
-      id: typeof docs[number]['_id'];
+      id: typeof docs[number]['id'];
       name: string;
       expiryDate?: string;
       daysUntilExpiry: number;
@@ -229,7 +241,7 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
       if (doc.status === 'processed') totals.processed += 1;
       if (doc.status === 'failed') totals.failed += 1;
 
-      const expiryInDays = daysUntilExpiry(doc.extractedData?.expiryDate);
+      const expiryInDays = daysUntilExpiry((doc.extractedData as ExtractedDocumentData | null)?.expiryDate);
 
       if (expiryInDays == null) {
         totals.missingExpiry += 1;
@@ -244,20 +256,21 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
       if (expiryInDays <= expiringWithinDays) {
         totals.expiringSoon += 1;
         const expiringEntry: {
-          id: typeof docs[number]['_id'];
+          id: typeof docs[number]['id'];
           name: string;
           expiryDate?: string;
           daysUntilExpiry: number;
           status: typeof docs[number]['status'];
         } = {
-          id: doc._id,
+          id: doc.id,
           name: doc.originalName,
           daysUntilExpiry: expiryInDays,
           status: doc.status,
         };
 
-        if (doc.extractedData?.expiryDate) {
-          expiringEntry.expiryDate = doc.extractedData.expiryDate;
+        const expiryDate = (doc.extractedData as ExtractedDocumentData | null)?.expiryDate;
+        if (expiryDate) {
+          expiringEntry.expiryDate = expiryDate;
         }
 
         expiringDocuments.push({
@@ -296,13 +309,16 @@ export const searchDocuments = async (req: Request, res: Response) => {
     const keywordTerms = tokenizeSearchTerms(query);
     const expiryWindowDays = extractExpiryWindowDays(query);
 
-    const docs = await DocumentModel.find({ status: 'processed' }).sort({ uploadDate: -1 }).limit(100);
-
+    const docs = await prisma.document.findMany({
+      where: { status: 'processed' },
+      orderBy: { uploadDate: 'desc' },
+      take: 100,
+    });
     const matches = docs
       .map(doc => {
         const haystack = buildDocumentSearchSummary(doc);
         const matchedTerms = keywordTerms.filter(term => haystack.includes(term));
-        const expiryInDays = daysUntilExpiry(doc.extractedData?.expiryDate);
+        const expiryInDays = daysUntilExpiry((doc.extractedData as ExtractedDocumentData | null)?.expiryDate);
         const matchesExpiryWindow = expiryWindowDays == null
           ? true
           : expiryInDays != null && expiryInDays >= 0 && expiryInDays <= expiryWindowDays;
@@ -322,7 +338,7 @@ export const searchDocuments = async (req: Request, res: Response) => {
         }
 
         return {
-          id: doc._id,
+          id: doc.id,
           name: doc.originalName,
           status: doc.status,
           storagePath: doc.storagePath,
@@ -332,7 +348,7 @@ export const searchDocuments = async (req: Request, res: Response) => {
         };
       })
       .filter((doc): doc is {
-        id: typeof docs[number]['_id'];
+        id: typeof docs[number]['id'];
         name: string;
         status: typeof docs[number]['status'];
         storagePath: string;
@@ -360,9 +376,11 @@ export const searchDocuments = async (req: Request, res: Response) => {
 export const getNotifications = async (req: Request, res: Response) => {
   try {
     // Get last 5 unread notifications
-    const alerts = await NotificationModel.find({ read: false })
-      .sort({ createdAt: -1 })
-      .limit(5);
+    const alerts = await prisma.notification.findMany({
+      where: { read: false },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
     res.json(alerts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch alerts' });
@@ -371,9 +389,13 @@ export const getNotifications = async (req: Request, res: Response) => {
 export const markAsRead = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Notification id is required' });
+    }
 
-    await NotificationModel.findByIdAndUpdate(id, {
-      read: true
+    await prisma.notification.update({
+      where: { id },
+      data: { read: true },
     });
 
     res.json({ success: true });

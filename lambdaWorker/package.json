@@ -12,6 +12,6 @@
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^1.38.0",
-    "mongoose": "^8.21.1"
+    "pg": "^8.x"
   }
 }
