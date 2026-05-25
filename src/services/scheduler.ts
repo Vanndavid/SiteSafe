@@ -3,11 +3,11 @@ import DocumentModel from '../models/Document';
 import NotificationModel from '../models/Notification';
 
 export const startScheduler = () => {
-  console.log('⏰ Compliance Scheduler Initialized');
+  console.log('Compliance scheduler initialized');
 
   // Run every 10 seconds for DEMO purposes (In prod: '0 9 * * *')
   cron.schedule('*/10 * * * * *', async () => {
-    console.log('🔍 Running Compliance Scan...');
+    console.log('Running compliance scan...');
     await checkExpiringDocuments();
   });
 };
@@ -39,15 +39,15 @@ const checkExpiringDocuments = async () => {
           if (!exists) {
             await NotificationModel.create({
               type: 'EXPIRY_WARNING',
-              message: `⚠️ Action Required: ${doc.extractedData.docType || 'Document'} expires on ${doc.extractedData.expiryDate}`,
+              message: `Action required: ${doc.extractedData.docType || 'Document'} expires on ${doc.extractedData.expiryDate}`,
               docId: doc._id
             });
-            console.log(`🔔 Generated Alert for ${doc._id}`);
+            console.log(`Generated alert for ${doc._id}`);
           }
         }
       }
     }
   } catch (error) {
-    console.error('❌ Scheduler Error:', error);
+    console.error('Scheduler error:', error);
   }
 };

@@ -14,13 +14,13 @@ dotenv.config();
 const connectDB = async () => {
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/aicpompliance');
-    console.log('✅ Worker Connected to MongoDB');
+    console.log('Worker connected to MongoDB');
   }
 };
 
 connectDB();
 
-console.log('👷 Document Worker Started. Waiting for jobs...');
+console.log('Document worker started. Waiting for jobs...');
 
 // Define the shape of the Job Data for TypeScript
 interface DocumentJobData {
@@ -30,7 +30,7 @@ interface DocumentJobData {
 }
 
 export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (job) => {
-  console.log(`⚙️ Processing Job ${job.id}: ${job.data.docId}`);
+  console.log(`Processing job ${job.id}: ${job.data.docId}`);
 
   try {
     // Explicitly destructure with types
@@ -38,7 +38,7 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
 
     // 1. Analyze with Gemini
     const aiResult = await analyzeDocument(filePath, mimeType);
-    console.log(`🧠 AI Analysis Complete for ${docId}`);
+    console.log(`AI analysis complete for ${docId}`);
 
     // 2. Update Database
     const updatedDoc = await DocumentModel.findByIdAndUpdate(
@@ -57,11 +57,11 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
       { new: true }
     );
 
-    console.log(`✅ Document updated: ${updatedDoc?._id}`);
+    console.log(`Document updated: ${updatedDoc?._id}`);
     return aiResult;
 
   } catch (error) {
-    console.error(`❌ Job Failed ${job.id}:`, error);
+    console.error(`Job failed ${job.id}:`, error);
     
     // Mark DB as failed
     if (job.data.docId) {

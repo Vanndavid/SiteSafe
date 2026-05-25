@@ -45,7 +45,7 @@ app.get('/', (req, res) => {
 // Only listen if this file is run directly (not imported by tests)
 if (require.main === module) {
   app.listen(port, () => {
-    console.log(`🚀 Server running at http://localhost:${port}`);
+    console.log(`Server running at http://localhost:${port}`);
   });
 }
 

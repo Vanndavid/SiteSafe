@@ -92,7 +92,7 @@ const s3 = new S3Client({
 
 // GET /api/health
 export const checkHealth = (req: Request, res: Response) => {
-  res.json({ status: 'active', message: ' API is running 🟢' });
+  res.json({ status: 'active', message: 'API is running' });
 };
 
 // POST /api/upload (Async Version - Day 5)
