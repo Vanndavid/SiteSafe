@@ -8,6 +8,13 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getAuth } from '@clerk/express'; 
 
+type WorkerProcessingStatus = 'processed' | 'failed';
+
+type WorkerProcessingResult = {
+  status?: WorkerProcessingStatus;
+  extractedData?: ExtractedDocumentData;
+};
+
 const SEARCH_STOP_WORDS = new Set([
   'a', 'about', 'all', 'an', 'and', 'are', 'be', 'by', 'documents', 'document', 'expire', 'expired', 'expiring',
   'files', 'find', 'for', 'from', 'in', 'is', 'me', 'month', 'months', 'of', 'show', 'that', 'the', 'their',
@@ -179,6 +186,57 @@ export const getDocumentStatus = async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch status' });
+  }
+};
+
+export const updateDocumentProcessingResult = async (req: Request, res: Response) => {
+  try {
+    const expectedToken = process.env.WORKER_CALLBACK_TOKEN;
+    const providedToken = req.header('x-worker-token');
+
+    if (!expectedToken) {
+      console.error('WORKER_CALLBACK_TOKEN is not configured');
+      return res.status(500).json({ error: 'Worker callback is not configured' });
+    }
+
+    if (!providedToken || providedToken !== expectedToken) {
+      return res.status(401).json({ error: 'Unauthorized worker callback' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const { status, extractedData } = req.body as WorkerProcessingResult;
+    if (status !== 'processed' && status !== 'failed') {
+      return res.status(400).json({ error: 'Invalid processing status' });
+    }
+
+    const data = status === 'processed'
+      ? {
+          status,
+          extractedData: extractedData || {},
+        }
+      : {
+          status,
+        };
+
+    const updatedDoc = await prisma.document.update({
+      where: { id },
+      data,
+    });
+
+    res.json({
+      success: true,
+      document: {
+        id: updatedDoc.id,
+        status: updatedDoc.status,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to update document processing result:', error);
+    res.status(500).json({ error: 'Failed to update document processing result' });
   }
 };
 

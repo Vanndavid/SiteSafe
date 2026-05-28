@@ -21,6 +21,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aicompliance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks: [web]
   # Database GUI (View at http://localhost:8081)
   # mongo-express:
@@ -43,18 +48,19 @@ services:
   #   networks: [web]
   # ✅ Backend (DEV mode)
   backend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_backend
     working_dir: /app
     volumes:
       - .:/app
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
     # ports:
     #   - "3000:3000"
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     #   - redis
     restart: unless-stopped
     # traefik
@@ -68,7 +74,7 @@ services:
       - "traefik.http.services.aicompliance-api.loadbalancer.server.port=3000"
   # replaced by lambda worker
   # worker:
-  #   image: node:20-alpine
+  #   image: node:22-alpine
   #   container_name: aicompliance_worker
   #   working_dir: /app
   #   volumes:
@@ -82,7 +88,7 @@ services:
   #   restart: unless-stopped
   #   networks: [web]
   frontend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_frontend
     working_dir: /app
     volumes:
