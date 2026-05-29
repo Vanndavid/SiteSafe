@@ -3,8 +3,9 @@ import { Request, Response } from 'express';
 import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
 import prisma from '../config/prisma';
 import type { ExtractedDocumentData } from '../models/Document';
+import { randomUUID } from 'crypto';
 
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getAuth } from '@clerk/express'; 
 
@@ -20,6 +21,16 @@ const SEARCH_STOP_WORDS = new Set([
   'files', 'find', 'for', 'from', 'in', 'is', 'me', 'month', 'months', 'of', 'show', 'that', 'the', 'their',
   'to', 'uploaded', 'user', 'with', 'within'
 ]);
+
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+]);
+
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const PRESIGNED_UPLOAD_EXPIRES_SECONDS = 5 * 60;
+const UPLOADING_DOCUMENT_STATUS = 'uploading';
 
 const normalizeSearchText = (value?: string) =>
   (value || '')
@@ -75,6 +86,45 @@ const parsePositiveInt = (value: unknown, fallback: number) => {
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed) || parsed <= 0) return fallback;
   return parsed;
+};
+
+const getRequestUserId = (req: Request) => {
+  try {
+    return getAuth(req).userId || 'test_user_123';
+  } catch {
+    return 'test_user_123';
+  }
+};
+
+const sanitizeFileName = (fileName: string) => {
+  const baseName = fileName.split(/[\\/]/).pop() || 'document';
+  const safeName = baseName
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 120);
+
+  return safeName || 'document';
+};
+
+const validateUploadIntent = (fileName: unknown, mimeType: unknown, sizeBytes: unknown) => {
+  if (typeof fileName !== 'string' || !fileName.trim()) {
+    return 'fileName is required';
+  }
+
+  if (typeof mimeType !== 'string' || !ALLOWED_UPLOAD_MIME_TYPES.has(mimeType)) {
+    return 'Unsupported file type';
+  }
+
+  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return 'sizeBytes must be a positive number';
+  }
+
+  if (sizeBytes > MAX_UPLOAD_SIZE_BYTES) {
+    return `File must be ${MAX_UPLOAD_SIZE_BYTES} bytes or smaller`;
+  }
+
+  return null;
 };
 
 const buildDocumentSearchSummary = (doc: any) => {
@@ -160,6 +210,128 @@ export const uploadDocument = async (req: Request, res: Response) => {
       success: false, 
       error: 'Upload Failed',
       details: (error as Error).message 
+    });
+  }
+};
+
+// POST /api/documents/upload-url
+export const createDocumentUploadUrl = async (req: Request, res: Response) => {
+  const { fileName, mimeType, sizeBytes } = req.body || {};
+  const validationError = validateUploadIntent(fileName, mimeType, sizeBytes);
+
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const userId = getRequestUserId(req);
+    const documentId = randomUUID();
+    const safeFileName = sanitizeFileName(fileName);
+    const key = `uploads/${userId}/${documentId}-${safeFileName}`;
+
+    await prisma.document.create({
+      data: {
+        id: documentId,
+        originalName: fileName,
+        storagePath: key,
+        mimeType,
+        status: UPLOADING_DOCUMENT_STATUS as any,
+        userId,
+      },
+    });
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+      ContentType: mimeType,
+      Metadata: {
+        documentId,
+        userId,
+        originalName: safeFileName,
+      },
+    });
+
+    const uploadUrl = await getSignedUrl(s3, command, {
+      expiresIn: PRESIGNED_UPLOAD_EXPIRES_SECONDS,
+    });
+
+    res.status(201).json({
+      documentId,
+      key,
+      uploadUrl,
+      expiresIn: PRESIGNED_UPLOAD_EXPIRES_SECONDS,
+    });
+  } catch (error) {
+    console.error('Failed to create upload URL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create upload URL',
+      details: (error as Error).message,
+    });
+  }
+};
+
+// POST /api/documents/:id/complete-upload
+export const completeDocumentUpload = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const userId = getRequestUserId(req);
+    const doc = await prisma.document.findUnique({
+      where: { id },
+    });
+
+    if (!doc || doc.userId !== userId) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    if (String(doc.status) !== UPLOADING_DOCUMENT_STATUS) {
+      return res.status(409).json({ error: `Document upload is already ${doc.status}` });
+    }
+
+    const headResult = await s3.send(new HeadObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: doc.storagePath,
+    }));
+
+    if (headResult.ContentType && headResult.ContentType !== doc.mimeType) {
+      return res.status(400).json({ error: 'Uploaded file type does not match reserved file type' });
+    }
+
+    if (headResult.ContentLength && headResult.ContentLength > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: 'Uploaded file is too large' });
+    }
+
+    const updatedDoc = await prisma.document.update({
+      where: { id },
+      data: {
+        status: 'pending',
+      },
+    });
+
+    if (typeof addDocumentJob === 'function') {
+      await addDocumentJob(updatedDoc.id as unknown as string, updatedDoc.storagePath, updatedDoc.mimeType);
+    }
+
+    res.status(202).json({
+      success: true,
+      message: 'Upload confirmed. Processing in background.',
+      file: {
+        id: updatedDoc.id,
+        originalName: updatedDoc.originalName,
+        status: updatedDoc.status,
+        key: updatedDoc.storagePath,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to complete upload:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to complete upload',
+      details: (error as Error).message,
     });
   }
 };

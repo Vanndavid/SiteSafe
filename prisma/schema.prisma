@@ -9,6 +9,7 @@ datasource db {
 }
 
 enum DocumentStatus {
+  uploading
   pending
   processed
   failed
