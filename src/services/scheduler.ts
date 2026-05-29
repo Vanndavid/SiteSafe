@@ -1,6 +1,6 @@
 import cron from 'node-cron';
-import DocumentModel from '../models/Document';
-import NotificationModel from '../models/Notification';
+import prisma from '../config/prisma';
+import type { ExtractedDocumentData } from '../models/Document';
 
 export const startScheduler = () => {
   console.log('Compliance scheduler initialized');
@@ -20,29 +20,41 @@ const checkExpiringDocuments = async () => {
 
     // Find processed documents that are not yet flagged
     // (In a real app, you'd track 'lastNotified' to avoid spamming)
-    const docs = await DocumentModel.find({ status: 'processed' });
+    const docs = await prisma.document.findMany({
+      where: {
+        status: 'processed'
+      }
+    });
 
     for (const doc of docs) {
-      if (doc.extractedData?.expiryDate) {
+      // Prisma stores Json as a broad type; narrow it to our interface
+      const extractedData = doc.extractedData as ExtractedDocumentData | null;
+
+      if (extractedData?.expiryDate) {
         // Parse "YYYY-MM-DD" string to Date
-        const expiry = new Date(doc.extractedData.expiryDate);
+        const expiry = new Date(extractedData.expiryDate);
         
         // Check if expiring soon AND in future
         if (expiry > today && expiry < warningWindow) {
           
           // Check if we already alerted recently (simple dedup)
-          const exists = await NotificationModel.findOne({ 
-            docId: doc._id, 
-            type: 'EXPIRY_WARNING',
+          const exists = await prisma.notification.findFirst({
+            where: {
+              docId: doc.id,
+              type: 'EXPIRY_WARNING'
+            }
           });
 
           if (!exists) {
-            await NotificationModel.create({
-              type: 'EXPIRY_WARNING',
-              message: `Action required: ${doc.extractedData.docType || 'Document'} expires on ${doc.extractedData.expiryDate}`,
-              docId: doc._id
+            await prisma.notification.create({
+              data: {
+                type: 'EXPIRY_WARNING',
+                message: `Action Required: ${extractedData?.docType || 'Document'} expires on ${extractedData?.expiryDate}`,
+                docId: doc.id,
+                userId: doc.userId,
+              },
             });
-            console.log(`Generated alert for ${doc._id}`);
+            console.log(`Generated Alert for ${doc.id}`);
           }
         }
       }

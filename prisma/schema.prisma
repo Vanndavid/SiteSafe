@@ -1,0 +1,47 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  uploading
+  pending
+  processed
+  failed
+}
+
+enum NotificationType {
+  EXPIRY_WARNING
+  SYSTEM_INFO
+}
+
+model Document {
+  id            String         @id @default(uuid())
+  userId        String?
+  userEmail     String?
+  originalName  String
+  storagePath   String
+  mimeType      String
+  uploadDate    DateTime       @default(now())
+  status        DocumentStatus @default(pending)
+  extractedData Json?
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  message   String
+  docId     String?
+  createdAt DateTime         @default(now())
+  read      Boolean          @default(false)
+  userId    String?
+
+  @@index([userId])
+}

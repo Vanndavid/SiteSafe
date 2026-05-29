@@ -4,23 +4,12 @@ import { Worker } from 'bullmq';
 import connection from '../config/redis';
 import { DOCUMENT_QUEUE_NAME } from '../queues/documentQueue';
 import { analyzeDocument } from '../services/geminiService';
-import DocumentModel from '../models/Document';
-import mongoose from 'mongoose';
+import prisma from '../config/prisma';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// We need a separate DB connection for the worker process
-const connectDB = async () => {
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/aicpompliance');
-    console.log('Worker connected to MongoDB');
-  }
-};
-
-connectDB();
-
-console.log('Document worker started. Waiting for jobs...');
+console.log('Document Worker Started. Waiting for jobs...');
 
 // Define the shape of the Job Data for TypeScript
 interface DocumentJobData {
@@ -41,9 +30,9 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
     console.log(`AI analysis complete for ${docId}`);
 
     // 2. Update Database
-    const updatedDoc = await DocumentModel.findByIdAndUpdate(
-      docId, 
-      {
+    const updatedDoc = await prisma.document.update({
+      where: { id: docId },
+      data: {
         status: 'processed',
         extractedData: {
           docType: aiResult.type,
@@ -51,13 +40,12 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
           licenseNumber: aiResult.licenseNumber,
           holderName: aiResult.name,
           confidence: aiResult.confidence,
-          content: aiResult.content
-        }
+          content: aiResult.content,
+        },
       },
-      { new: true }
-    );
+    });
 
-    console.log(`Document updated: ${updatedDoc?._id}`);
+    console.log(`Document updated: ${updatedDoc?.id}`);
     return aiResult;
 
   } catch (error) {
@@ -65,8 +53,9 @@ export const worker = new Worker<DocumentJobData>(DOCUMENT_QUEUE_NAME, async (jo
     
     // Mark DB as failed
     if (job.data.docId) {
-      await DocumentModel.findByIdAndUpdate(job.data.docId, { 
-        status: 'failed' 
+      await prisma.document.update({
+        where: { id: job.data.docId },
+        data: { status: 'failed' },
       });
     }
     throw error;

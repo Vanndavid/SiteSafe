@@ -1,6 +1,5 @@
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { GoogleGenAI } = require("@google/genai");
-const mongoose = require("mongoose");
 
 // --- 1. SETUP CLIENTS (From geminiService.ts) ---
 const s3 = new S3Client({
@@ -9,25 +8,45 @@ const s3 = new S3Client({
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// --- 2. DEFINE SCHEMA (From models/Document.ts) ---
-// We define this inline because Lambda can't see your 'models' folder
-const DocumentSchema = new mongoose.Schema({
-  status: String,
-  extractedData: {
-    docType: String,
-    expiryDate: String,
-    licenseNumber: String,
-    holderName: String,
-    confidence: Number,
-    content: String
-  },
-  aiSummary: String // If you use this field
-}, { strict: false });
+const API_BASE_URL = process.env.WORKER_CALLBACK_API_BASE_URL;
+const WORKER_CALLBACK_TOKEN = process.env.WORKER_CALLBACK_TOKEN;
 
-const DocumentModel = mongoose.model("Document", DocumentSchema);
+function assertCallbackConfig() {
+  if (!API_BASE_URL) {
+    throw new Error("WORKER_CALLBACK_API_BASE_URL is required");
+  }
 
-// Cache the DB connection so we don't reconnect on every single message
-let isConnected = false;
+  if (!WORKER_CALLBACK_TOKEN) {
+    throw new Error("WORKER_CALLBACK_TOKEN is required");
+  }
+}
+
+function markCallbackError(error) {
+  error.callbackFailed = true;
+  return error;
+}
+
+async function reportProcessingResult(docId, payload) {
+  assertCallbackConfig();
+
+  const callbackUrl = new URL(
+    `/api/internal/documents/${docId}/processing-result`,
+    API_BASE_URL
+  ).toString();
+  const response = await fetch(callbackUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-worker-token": WORKER_CALLBACK_TOKEN,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw markCallbackError(new Error(`Worker callback failed with ${response.status}: ${responseText}`));
+  }
+}
 
 // --- 3. HELPER: Download from S3 (From geminiService.ts) ---
 async function getFileFromS3(bucket, key) {
@@ -47,13 +66,6 @@ async function getFileFromS3(bucket, key) {
 // --- 4. THE LAMBDA HANDLER (From documentWorker.ts) ---
 exports.handler = async (event) => {
   console.log(`Lambda started. Processing ${event.Records.length} records.`);
-
-  // A. Connect to MongoDB (Reuse connection)
-  if (!isConnected) {
-    await mongoose.connect(process.env.MONGODB_URI);
-    isConnected = true;
-    console.log("Worker connected to MongoDB");
-  }
 
   // B. Loop through SQS Messages (Replacing the BullMQ 'Worker' loop)
   for (const record of event.Records) {
@@ -112,17 +124,17 @@ exports.handler = async (event) => {
 
       console.log(`AI analysis complete for ${docId}`);
 
-      // 6. Update Database (Logic from documentWorker.ts)
-      await DocumentModel.findByIdAndUpdate(docId, {
+      // 6. Report result to API. The API is the only service that writes to Postgres.
+      await reportProcessingResult(docId, {
         status: "processed",
         extractedData: {
-          docType: aiResult.type,          // Mapped from 'type'
+          docType: aiResult.type,
           expiryDate: aiResult.expiryDate,
           licenseNumber: aiResult.licenseNumber,
           holderName: aiResult.name,
           confidence: aiResult.confidence,
-          content: aiResult.content
-        }
+          content: aiResult.content,
+        },
       });
 
       console.log(`Document updated: ${docId}`);
@@ -130,14 +142,16 @@ exports.handler = async (event) => {
     } catch (error) {
       console.error(`Job failed ${docId}:`, error);
 
-      // Mark DB as failed (Logic from documentWorker.ts)
-      if (docId) {
-        await DocumentModel.findByIdAndUpdate(docId, { status: "failed" });
+      if (error.callbackFailed) {
+        throw error;
       }
-      
-      // OPTIONAL: If you want SQS to retry the message later (e.g. API limit), 
-      // uncomment the line below. If you want to delete it and move on, leave it commented.
-      // throw error; 
+
+      // Report processing failure to API. If this callback fails, throw so SQS retries.
+      if (docId) {
+        await reportProcessingResult(docId, {
+          status: "failed",
+        });
+      }
     }
   }
 

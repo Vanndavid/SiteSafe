@@ -1,7 +1,6 @@
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
 import { analyzeDocument } from "../services/geminiService";
-import DocumentModel from "../models/Document";
-import mongoose from "mongoose";
+import prisma from "../config/prisma";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -19,12 +18,6 @@ const QUEUE_URL = process.env.SQS_QUEUE_URL!;
 
 export const startWorker = async () => {
   console.log("SQS worker started. Listening for jobs...");
-
-  // Ensure DB is connected (Reuse your existing logic)
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGODB_URI!);
-    console.log("Worker connected to MongoDB");
-  }
 
   // 2. The Infinite Loop (Replaces 'new Worker')
   while (true) {
@@ -65,9 +58,9 @@ export const startWorker = async () => {
         console.log(`AI analysis complete for ${docId}`);
 
         // 3. Update Database (Exactly as before)
-        const updatedDoc = await DocumentModel.findByIdAndUpdate(
-          docId,
-          {
+        const updatedDoc = await prisma.document.update({
+          where: { id: docId },
+          data: {
             status: 'processed',
             extractedData: {
               docType: aiResult.type,
@@ -75,13 +68,12 @@ export const startWorker = async () => {
               licenseNumber: aiResult.licenseNumber,
               holderName: aiResult.name,
               confidence: aiResult.confidence,
-              content: aiResult.content
-            }
+              content: aiResult.content,
+            },
           },
-          { new: true }
-        );
+        });
 
-        console.log(`Document updated: ${updatedDoc?._id}`);
+        console.log(`Document updated: ${updatedDoc?.id}`);
 
         // 4. DELETE Message (Success!)
         // SQS doesn't auto-delete. We must tell it we are done.
@@ -98,8 +90,9 @@ export const startWorker = async () => {
         // Mark DB as failed
         const body = JSON.parse(message.Body!); // Re-parse safely to get ID
         if (body.docId) {
-          await DocumentModel.findByIdAndUpdate(body.docId, { 
-            status: 'failed' 
+          await prisma.document.update({
+            where: { id: body.docId },
+            data: { status: 'failed' }
           });
         }
         

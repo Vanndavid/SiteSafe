@@ -29,6 +29,7 @@ app.use(cors({
       'https://aicompliance.vanndavidteng.com',
       'http://localhost:5173', // dev
       'http://sitesafe.local', // dev
+      'https://sitesafe.local', // dev
     ],
     credentials: true,
   }));

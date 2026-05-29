@@ -10,8 +10,10 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
-    "@google/genai": "^1.38.0",
-    "mongoose": "^8.21.1"
+    "@google/genai": "^1.38.0"
   }
 }
