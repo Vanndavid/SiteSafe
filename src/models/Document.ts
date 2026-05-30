@@ -1,5 +1,3 @@
-import type { Document } from '@prisma/client';
-
 export type ExtractedDocumentData = {
   docType?: string;
   expiryDate?: string;
