@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { ExtractedDocumentData } from '../models/Document';
 
 const SEARCH_STOP_WORDS = new Set([
@@ -39,14 +40,20 @@ export const extractExpiryWindowDays = (query: string) => {
   if (unit.startsWith('month')) return amount * 30;
   return null;
 };
+export const buildDocumentSearchSummary = (
+  doc: {
+    originalName: string;
+    extractedData?: Prisma.JsonValue;
+  }
+) => {
+  const extracted = doc.extractedData as ExtractedDocumentData | null;
 
-export const buildDocumentSearchSummary = (doc: { originalName: string; extractedData?: ExtractedDocumentData | null }) => {
   const parts = [
     doc.originalName,
-    doc.extractedData?.docType,
-    doc.extractedData?.holderName,
-    doc.extractedData?.licenseNumber,
-    doc.extractedData?.content,
+    extracted?.docType,
+    extracted?.holderName,
+    extracted?.licenseNumber,
+    extracted?.content,
   ].filter(Boolean);
 
   return normalizeSearchText(parts.join(' '));

@@ -5,6 +5,8 @@ import { createSignedUploadUrl } from './storageService';
 import { buildDocumentSearchSummary, extractExpiryWindowDays, tokenizeSearchTerms } from '../utils/searchUtils';
 import { daysUntilExpiry } from '../utils/dateUtils';
 import { sanitizeFileName } from '../utils/fileUtils';
+import { formatDocumentListItem } from '../utils/documentFormatter';
+import { computeDocumentOverview } from '../utils/overviewUtils';
 import type { Document } from '@prisma/client';
 import type { ExtractedDocumentData } from '../models/Document';
 
@@ -84,18 +86,13 @@ export const markDocumentPendingAndQueue = async (document: Document) => {
 };
 
 export const getAllDocuments = async () => {
-  const docs = await prisma.document.findMany({
+  const docs: Document[] = await prisma.document.findMany({
     orderBy: { uploadDate: 'desc' },
     take: 20,
   });
 
-  return docs.map(doc => ({
-    id: doc.id,
-    name: doc.originalName,
-    status: doc.status,
-    storagePath: doc.storagePath,
-    extraction: doc.extractedData,
-  }));
+  // Use a small formatter so tests can validate the transformation separately
+  return docs.map(formatDocumentListItem);
 };
 
 export const getDocumentStatusById = async (id: string) => {
@@ -116,59 +113,7 @@ export const getDocumentOverview = async (expiringWithinDays: number, limit: num
     take: MAX_OVERVIEW_RECORDS,
   });
 
-  const totals = {
-    total: docs.length,
-    pending: 0,
-    processed: 0,
-    failed: 0,
-    expired: 0,
-    expiringSoon: 0,
-    valid: 0,
-    missingExpiry: 0,
-  };
-
-  const expiringDocuments: Array<{ id: string; name: string; expiryDate?: string; daysUntilExpiry: number; status: string }> = [];
-
-  docs.forEach(doc => {
-    if (doc.status === 'pending') totals.pending += 1;
-    if (doc.status === 'processed') totals.processed += 1;
-    if (doc.status === 'failed') totals.failed += 1;
-
-    const expiryInDays = daysUntilExpiry((doc.extractedData as ExtractedDocumentData | null)?.expiryDate);
-
-    if (expiryInDays == null) {
-      totals.missingExpiry += 1;
-      return;
-    }
-
-    if (expiryInDays < 0) {
-      totals.expired += 1;
-      return;
-    }
-
-    if (expiryInDays <= expiringWithinDays) {
-      totals.expiringSoon += 1;
-      expiringDocuments.push({
-        id: doc.id,
-        name: doc.originalName,
-        expiryDate: (doc.extractedData as ExtractedDocumentData | null)?.expiryDate,
-        daysUntilExpiry: expiryInDays,
-        status: doc.status,
-      });
-      return;
-    }
-
-    totals.valid += 1;
-  });
-
-  expiringDocuments.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
-
-  return {
-    generatedAt: new Date().toISOString(),
-    filters: { expiringWithinDays },
-    totals,
-    expiringDocuments: expiringDocuments.slice(0, limit),
-  };
+  return computeDocumentOverview(docs, expiringWithinDays, limit);
 };
 
 export const searchProcessedDocuments = async (query: string) => {
@@ -213,7 +158,7 @@ export const searchProcessedDocuments = async (query: string) => {
         score: matchedTerms.length + (matchesExpiryWindow && expiryWindowDays != null ? 2 : 0),
       };
     })
-    .filter((doc): doc is { id: string; name: string; status: string; storagePath: string; extraction: ExtractedDocumentData | null; matchReasons: string[]; score: number } => doc !== null)
+    .filter(doc => doc !== null)
     .sort((a, b) => b.score - a.score)
     .map(({ score, ...doc }) => doc);
 
