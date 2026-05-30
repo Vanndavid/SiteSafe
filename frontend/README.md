@@ -1,5 +1,14 @@
 # React + TypeScript + Vite
 
+## Auth Safety Baseline (Clerk)
+
+For this project, keep frontend auth handling simple and safe:
+
+- Do not store Clerk auth tokens in `localStorage` or `sessionStorage`.
+- Do not print auth tokens in logs or browser console.
+- Fetch tokens at runtime via Clerk (`getToken`) and send them as `Authorization: Bearer ...` on API requests.
+- Use HTTPS in production.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

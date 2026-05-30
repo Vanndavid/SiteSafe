@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 import request from 'supertest';
 import app from '../server'; // Import your Express App
-import mongoose from 'mongoose';
+import prisma from '../config/prisma';
 
 // Without this, the real Clerk middleware runs with a fake key and crashes the server.
 jest.mock('@clerk/express', () => ({
@@ -12,7 +12,7 @@ jest.mock('@clerk/express', () => ({
 
 // Close DB connection after tests
 afterAll(async () => {
-  await mongoose.connection.close();
+  await prisma.$disconnect();
 });
 
 describe('GET /api/health', () => {

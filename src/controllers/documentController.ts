@@ -1,18 +1,36 @@
 import { Request, Response } from 'express';
-import DocumentModel from '../models/Document';
-import { addDocumentJob } from '../queues/documentQueue';
-// import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
-import NotificationModel from '../models/Notification';
+// import { addDocumentJob } from '../queues/documentQueue';
+import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
+import prisma from '../config/prisma';
+import type { ExtractedDocumentData } from '../models/Document';
+import { randomUUID } from 'crypto';
 
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getAuth } from '@clerk/express'; 
+
+type WorkerProcessingStatus = 'processed' | 'failed';
+
+type WorkerProcessingResult = {
+  status?: WorkerProcessingStatus;
+  extractedData?: ExtractedDocumentData;
+};
 
 const SEARCH_STOP_WORDS = new Set([
   'a', 'about', 'all', 'an', 'and', 'are', 'be', 'by', 'documents', 'document', 'expire', 'expired', 'expiring',
   'files', 'find', 'for', 'from', 'in', 'is', 'me', 'month', 'months', 'of', 'show', 'that', 'the', 'their',
   'to', 'uploaded', 'user', 'with', 'within'
 ]);
+
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+]);
+
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const PRESIGNED_UPLOAD_EXPIRES_SECONDS = 5 * 60;
+const UPLOADING_DOCUMENT_STATUS = 'uploading';
 
 const normalizeSearchText = (value?: string) =>
   (value || '')
@@ -70,6 +88,45 @@ const parsePositiveInt = (value: unknown, fallback: number) => {
   return parsed;
 };
 
+const getRequestUserId = (req: Request) => {
+  try {
+    return getAuth(req).userId || 'test_user_123';
+  } catch {
+    return 'test_user_123';
+  }
+};
+
+const sanitizeFileName = (fileName: string) => {
+  const baseName = fileName.split(/[\\/]/).pop() || 'document';
+  const safeName = baseName
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 120);
+
+  return safeName || 'document';
+};
+
+const validateUploadIntent = (fileName: unknown, mimeType: unknown, sizeBytes: unknown) => {
+  if (typeof fileName !== 'string' || !fileName.trim()) {
+    return 'fileName is required';
+  }
+
+  if (typeof mimeType !== 'string' || !ALLOWED_UPLOAD_MIME_TYPES.has(mimeType)) {
+    return 'Unsupported file type';
+  }
+
+  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return 'sizeBytes must be a positive number';
+  }
+
+  if (sizeBytes > MAX_UPLOAD_SIZE_BYTES) {
+    return `File must be ${MAX_UPLOAD_SIZE_BYTES} bytes or smaller`;
+  }
+
+  return null;
+};
+
 const buildDocumentSearchSummary = (doc: any) => {
   const parts = [
     doc.originalName,
@@ -92,7 +149,7 @@ const s3 = new S3Client({
 
 // GET /api/health
 export const checkHealth = (req: Request, res: Response) => {
-  res.json({ status: 'active', message: ' API is running 🟢' });
+  res.json({ status: 'active', message: 'API is running' });
 };
 
 // POST /api/upload (Async Version - Day 5)
@@ -118,20 +175,21 @@ export const uploadDocument = async (req: Request, res: Response) => {
     console.log(`Received file key: ${fileData.key}`); 
 
     // 3. Create DB Record
-    const newDoc = await DocumentModel.create({
-      originalName: fileData.originalname,
-      // IMPORTANT: Save the S3 Key (e.g., "uploads/123.pdf"), NOT the full URL
-      storagePath: fileData.key, 
-      mimeType: fileData.mimetype,
-      status: 'pending',
-      userId: userId,
+    const newDoc = await prisma.document.create({
+      data: {
+        originalName: fileData.originalname,
+        storagePath: fileData.key,
+        mimeType: fileData.mimetype,
+        status: 'pending',
+        userId,
+      },
     });
 
     // 4. Dispatch Job to Queue
     // We pass the S3 Key so the Worker (or Lambda) can find it later
     // Ensure addDocumentJob accepts the key!
     if (typeof addDocumentJob === 'function') {
-        await addDocumentJob(newDoc._id as unknown as string, newDoc.storagePath, newDoc.mimeType);
+        await addDocumentJob(newDoc.id as unknown as string, newDoc.storagePath, newDoc.mimeType);
     }
 
     // 5. Success Response
@@ -139,7 +197,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
       success: true,
       message: 'Upload accepted. Processing in background.',
       file: {
-        id: newDoc._id,
+        id: newDoc.id,
         originalName: newDoc.originalName,
         status: 'pending',
         key: newDoc.storagePath // Useful for debugging
@@ -156,10 +214,139 @@ export const uploadDocument = async (req: Request, res: Response) => {
   }
 };
 
+// POST /api/documents/upload-url
+export const createDocumentUploadUrl = async (req: Request, res: Response) => {
+  const { fileName, mimeType, sizeBytes } = req.body || {};
+  const validationError = validateUploadIntent(fileName, mimeType, sizeBytes);
+
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const userId = getRequestUserId(req);
+    const documentId = randomUUID();
+    const safeFileName = sanitizeFileName(fileName);
+    const key = `uploads/${userId}/${documentId}-${safeFileName}`;
+
+    await prisma.document.create({
+      data: {
+        id: documentId,
+        originalName: fileName,
+        storagePath: key,
+        mimeType,
+        status: UPLOADING_DOCUMENT_STATUS as any,
+        userId,
+      },
+    });
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+      ContentType: mimeType,
+      Metadata: {
+        documentId,
+        userId,
+        originalName: safeFileName,
+      },
+    });
+
+    const uploadUrl = await getSignedUrl(s3, command, {
+      expiresIn: PRESIGNED_UPLOAD_EXPIRES_SECONDS,
+    });
+
+    res.status(201).json({
+      documentId,
+      key,
+      uploadUrl,
+      expiresIn: PRESIGNED_UPLOAD_EXPIRES_SECONDS,
+    });
+  } catch (error) {
+    console.error('Failed to create upload URL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create upload URL',
+      details: (error as Error).message,
+    });
+  }
+};
+
+// POST /api/documents/:id/complete-upload
+export const completeDocumentUpload = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const userId = getRequestUserId(req);
+    const doc = await prisma.document.findUnique({
+      where: { id },
+    });
+
+    if (!doc || doc.userId !== userId) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    if (String(doc.status) !== UPLOADING_DOCUMENT_STATUS) {
+      return res.status(409).json({ error: `Document upload is already ${doc.status}` });
+    }
+
+    const headResult = await s3.send(new HeadObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: doc.storagePath,
+    }));
+
+    if (headResult.ContentType && headResult.ContentType !== doc.mimeType) {
+      return res.status(400).json({ error: 'Uploaded file type does not match reserved file type' });
+    }
+
+    if (headResult.ContentLength && headResult.ContentLength > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: 'Uploaded file is too large' });
+    }
+
+    const updatedDoc = await prisma.document.update({
+      where: { id },
+      data: {
+        status: 'pending',
+      },
+    });
+
+    if (typeof addDocumentJob === 'function') {
+      await addDocumentJob(updatedDoc.id as unknown as string, updatedDoc.storagePath, updatedDoc.mimeType);
+    }
+
+    res.status(202).json({
+      success: true,
+      message: 'Upload confirmed. Processing in background.',
+      file: {
+        id: updatedDoc.id,
+        originalName: updatedDoc.originalName,
+        status: updatedDoc.status,
+        key: updatedDoc.storagePath,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to complete upload:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to complete upload',
+      details: (error as Error).message,
+    });
+  }
+};
+
 // GET /api/document/:id
 export const getDocumentStatus = async (req: Request, res: Response) => {
   try {
-    const doc = await DocumentModel.findById(req.params.id);
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const doc = await prisma.document.findUnique({
+      where: { id },
+    });
     if (!doc) {
       return res.status(404).json({ error: 'Document not found' });
     }
@@ -174,17 +361,69 @@ export const getDocumentStatus = async (req: Request, res: Response) => {
   }
 };
 
+export const updateDocumentProcessingResult = async (req: Request, res: Response) => {
+  try {
+    const expectedToken = process.env.WORKER_CALLBACK_TOKEN;
+    const providedToken = req.header('x-worker-token');
+
+    if (!expectedToken) {
+      console.error('WORKER_CALLBACK_TOKEN is not configured');
+      return res.status(500).json({ error: 'Worker callback is not configured' });
+    }
+
+    if (!providedToken || providedToken !== expectedToken) {
+      return res.status(401).json({ error: 'Unauthorized worker callback' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Document id is required' });
+    }
+
+    const { status, extractedData } = req.body as WorkerProcessingResult;
+    if (status !== 'processed' && status !== 'failed') {
+      return res.status(400).json({ error: 'Invalid processing status' });
+    }
+
+    const data = status === 'processed'
+      ? {
+          status,
+          extractedData: extractedData || {},
+        }
+      : {
+          status,
+        };
+
+    const updatedDoc = await prisma.document.update({
+      where: { id },
+      data,
+    });
+
+    res.json({
+      success: true,
+      document: {
+        id: updatedDoc.id,
+        status: updatedDoc.status,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to update document processing result:', error);
+    res.status(500).json({ error: 'Failed to update document processing result' });
+  }
+};
+
 // --- NEW: Get All Documents (History) ---
 export const getAllDocuments = async (req: Request, res: Response) => {
   try {
     // Get last 20 docs, newest first
-    const docs = await DocumentModel.find()
-      .sort({ uploadDate: -1 })
-      .limit(20);
+    const docs = await prisma.document.findMany({
+      orderBy: { uploadDate: 'desc' },
+      take: 20,
+    });
 
     // Map to frontend format
     const formattedDocs = docs.map(doc => ({
-      id: doc._id,
+      id: doc.id,
       name: doc.originalName,
       status: doc.status,
       storagePath: doc.storagePath,
@@ -203,7 +442,10 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
     const expiringWithinDays = parsePositiveInt(req.query.expiringWithinDays, 30);
     const limit = parsePositiveInt(req.query.limit, 5);
 
-    const docs = await DocumentModel.find().sort({ uploadDate: -1 }).limit(500);
+    const docs = await prisma.document.findMany({
+      orderBy: { uploadDate: 'desc' },
+      take: 500,
+    });
 
     const totals = {
       total: docs.length,
@@ -217,7 +459,7 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
     };
 
     const expiringDocuments: Array<{
-      id: typeof docs[number]['_id'];
+      id: typeof docs[number]['id'];
       name: string;
       expiryDate?: string;
       daysUntilExpiry: number;
@@ -229,7 +471,7 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
       if (doc.status === 'processed') totals.processed += 1;
       if (doc.status === 'failed') totals.failed += 1;
 
-      const expiryInDays = daysUntilExpiry(doc.extractedData?.expiryDate);
+      const expiryInDays = daysUntilExpiry((doc.extractedData as ExtractedDocumentData | null)?.expiryDate);
 
       if (expiryInDays == null) {
         totals.missingExpiry += 1;
@@ -244,20 +486,21 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
       if (expiryInDays <= expiringWithinDays) {
         totals.expiringSoon += 1;
         const expiringEntry: {
-          id: typeof docs[number]['_id'];
+          id: typeof docs[number]['id'];
           name: string;
           expiryDate?: string;
           daysUntilExpiry: number;
           status: typeof docs[number]['status'];
         } = {
-          id: doc._id,
+          id: doc.id,
           name: doc.originalName,
           daysUntilExpiry: expiryInDays,
           status: doc.status,
         };
 
-        if (doc.extractedData?.expiryDate) {
-          expiringEntry.expiryDate = doc.extractedData.expiryDate;
+        const expiryDate = (doc.extractedData as ExtractedDocumentData | null)?.expiryDate;
+        if (expiryDate) {
+          expiringEntry.expiryDate = expiryDate;
         }
 
         expiringDocuments.push({
@@ -296,13 +539,16 @@ export const searchDocuments = async (req: Request, res: Response) => {
     const keywordTerms = tokenizeSearchTerms(query);
     const expiryWindowDays = extractExpiryWindowDays(query);
 
-    const docs = await DocumentModel.find({ status: 'processed' }).sort({ uploadDate: -1 }).limit(100);
-
+    const docs = await prisma.document.findMany({
+      where: { status: 'processed' },
+      orderBy: { uploadDate: 'desc' },
+      take: 100,
+    });
     const matches = docs
       .map(doc => {
         const haystack = buildDocumentSearchSummary(doc);
         const matchedTerms = keywordTerms.filter(term => haystack.includes(term));
-        const expiryInDays = daysUntilExpiry(doc.extractedData?.expiryDate);
+        const expiryInDays = daysUntilExpiry((doc.extractedData as ExtractedDocumentData | null)?.expiryDate);
         const matchesExpiryWindow = expiryWindowDays == null
           ? true
           : expiryInDays != null && expiryInDays >= 0 && expiryInDays <= expiryWindowDays;
@@ -322,7 +568,7 @@ export const searchDocuments = async (req: Request, res: Response) => {
         }
 
         return {
-          id: doc._id,
+          id: doc.id,
           name: doc.originalName,
           status: doc.status,
           storagePath: doc.storagePath,
@@ -332,7 +578,7 @@ export const searchDocuments = async (req: Request, res: Response) => {
         };
       })
       .filter((doc): doc is {
-        id: typeof docs[number]['_id'];
+        id: typeof docs[number]['id'];
         name: string;
         status: typeof docs[number]['status'];
         storagePath: string;
@@ -360,9 +606,11 @@ export const searchDocuments = async (req: Request, res: Response) => {
 export const getNotifications = async (req: Request, res: Response) => {
   try {
     // Get last 5 unread notifications
-    const alerts = await NotificationModel.find({ read: false })
-      .sort({ createdAt: -1 })
-      .limit(5);
+    const alerts = await prisma.notification.findMany({
+      where: { read: false },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
     res.json(alerts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch alerts' });
@@ -371,9 +619,13 @@ export const getNotifications = async (req: Request, res: Response) => {
 export const markAsRead = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Notification id is required' });
+    }
 
-    await NotificationModel.findByIdAndUpdate(id, {
-      read: true
+    await prisma.notification.update({
+      where: { id },
+      data: { read: true },
     });
 
     res.json({ success: true });

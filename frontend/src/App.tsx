@@ -12,6 +12,13 @@ import { Fab, Tooltip } from '@mui/material';
 import LandingPage from './components/LandingPage';
 import { BillingCard } from './components/BillingCard';
 
+interface UploadUrlResponse {
+  documentId: string;
+  key: string;
+  uploadUrl: string;
+  expiresIn: number;
+}
+
 export default function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -25,7 +32,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchSummary, setSearchSummary] = useState<string | null>(null);
-  // auth token
+  // Auth token handling policy:
+  // - Do not persist auth tokens in localStorage/sessionStorage.
+  // - Do not log tokens to console.
+  // Token is fetched from Clerk and attached to API requests at runtime.
   const { getToken, isSignedIn } = useAuth();
   useEffect(() => {
     const setupApi = async () => {
@@ -150,22 +160,35 @@ export default function App() {
     setError(null);
     console.log('Uploading file:', file);
     try {
-      const formData = new FormData();
-      formData.append('document', file);
-
-      const res = await api.post('/api/upload', formData,{
-        headers: {
-          'Content-Type': undefined,
-        },
+      const uploadUrlRes = await api.post<UploadUrlResponse>('/api/documents/upload-url', {
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
       });
 
-      const data = res.data;
+      const { documentId, key, uploadUrl } = uploadUrlRes.data;
+      const s3Res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+
+      if (!s3Res.ok) {
+        throw new Error('S3 upload failed');
+      }
+
+      const completeRes = await api.post(`/api/documents/${documentId}/complete-upload`);
+      const data = completeRes.data;
+
       setDocuments(prev => [
-        { id: data.file.id, name: data.file.originalName, status: 'pending', storagePath: data.file.storagePath },
+        { id: data.file.id, name: data.file.originalName, status: 'pending', storagePath: data.file.key ?? key },
         ...prev
       ]);
       pollForStatus(data.file.id);
-    } catch {
+    } catch (err) {
+      console.error('Upload failed', err);
       setError('Upload failed');
     } finally {
       setUploading(false);

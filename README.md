@@ -96,7 +96,6 @@ User uploads document
 → UI reflects status
 → Scheduler sends reminders
 
-
 ### Why this architecture?
 - AI calls are slow and unreliable → async processing
 - External APIs (AI, SMS) → isolation & retries

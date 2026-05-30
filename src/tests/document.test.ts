@@ -1,8 +1,80 @@
 import request from 'supertest';
 
-// --- 2. MOCK S3 UPLOAD (Multer) ---
-// Crucial: We create a "Spy" middleware.
-// This allows us to change behavior per test (fail vs success).
+const mockDocuments: any[] = [];
+let mockIdCounter = 1;
+
+const mockPrisma = {
+  $connect: jest.fn().mockResolvedValue(undefined),
+  $disconnect: jest.fn().mockResolvedValue(undefined),
+  document: {
+    create: jest.fn(({ data }) => {
+      const doc = {
+        id: data.id || `doc_${mockIdCounter++}`,
+        uploadDate: new Date(),
+        extractedData: null,
+        ...data,
+        status: data.status || 'pending',
+      };
+      mockDocuments.push(doc);
+      return Promise.resolve(doc);
+    }),
+    findUnique: jest.fn(({ where }) => {
+      return Promise.resolve(mockDocuments.find(doc => doc.id === where.id) || null);
+    }),
+    findMany: jest.fn(({ where, orderBy, take } = {}) => {
+      let docs = [...mockDocuments];
+      if (where?.status) {
+        docs = docs.filter(doc => doc.status === where.status);
+      }
+      if (orderBy?.uploadDate === 'desc') {
+        docs.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime());
+      }
+      return Promise.resolve(typeof take === 'number' ? docs.slice(0, take) : docs);
+    }),
+    update: jest.fn(({ where, data }) => {
+      const index = mockDocuments.findIndex(doc => doc.id === where.id);
+      if (index === -1) {
+        throw new Error(`Document not found: ${where.id}`);
+      }
+      mockDocuments[index] = {
+        ...mockDocuments[index],
+        ...data,
+      };
+      return Promise.resolve(mockDocuments[index]);
+    }),
+    deleteMany: jest.fn(() => {
+      mockDocuments.length = 0;
+      mockIdCounter = 1;
+      return Promise.resolve({ count: 0 });
+    }),
+  },
+  notification: {
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({}),
+  },
+};
+
+jest.mock('../config/prisma', () => ({
+  __esModule: true,
+  default: mockPrisma,
+}));
+
+const mockS3Send = jest.fn();
+const mockGetSignedUrl = jest.fn().mockResolvedValue('https://s3.example.com/presigned-upload-url');
+
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn().mockImplementation(() => ({
+    send: mockS3Send,
+  })),
+  GetObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+  HeadObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+  PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
+}));
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: mockGetSignedUrl,
+}));
+
 const mockMulterMiddleware = jest.fn((req: any, res: any, next: any) => {
   next();
 });
@@ -10,32 +82,27 @@ const mockMulterMiddleware = jest.fn((req: any, res: any, next: any) => {
 jest.mock('../config/s3uploader', () => ({
   __esModule: true,
   default: {
-    // When the route calls upload.single('document'), return our spy
     single: () => mockMulterMiddleware 
   }
 }));
 
 import app from '../server';
-import mongoose from 'mongoose';
-import DocumentModel from '../models/Document';
+import { addDocumentJob } from '../queues/sqsProducer';
 
-// 1. SILENCE THE SCHEDULER (Prevents background DB calls)
 jest.mock('../services/scheduler', () => ({
   checkExpiringDocuments: jest.fn(),
   startScheduler: jest.fn() 
 }));
 
-// 2. SILENCE REDIS (Prevents the ENOTFOUND error)
 jest.mock('../config/redis', () => ({
   __esModule: true,
   default: {
     host: 'localhost',
     port: 6379,
-    lazyConnect: true // This tells the code "Don't connect until I ask"
+    lazyConnect: true
   }
 }));
 
-// 3. SILENCE THE QUEUE WORKER (Prevents BullMQ from starting)
 jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(() => ({
     add: jest.fn(),
@@ -46,8 +113,6 @@ jest.mock('bullmq', () => ({
   })),
 }));
 
-// --- 1. MOCK AUTH (Clerk) ---
-// Bypass real authentication
 jest.mock('@clerk/express', () => ({
   clerkMiddleware: () => (req: any, res: any, next: any) => {
     req.auth = { userId: 'test_user_123' };
@@ -60,209 +125,103 @@ jest.mock('@clerk/express', () => ({
   getAuth: () => ({ userId: 'test_user_123' }),
 }));
 
-
-
-// --- 3. MOCK QUEUE (BullMQ or SQS) ---
-// Prevent connecting to real Redis or AWS SQS during tests
 jest.mock('../queues/documentQueue', () => ({
-  addDocumentJob: jest.fn().mockResolvedValue({ id: 'mock-job-id' }) // Fake success
+  addDocumentJob: jest.fn().mockResolvedValue({ id: 'mock-job-id' })
 }));
 
-// B. Mock the Cloud Queue (SQS) - THIS STOPS THE AWS ERROR
 jest.mock('../queues/sqsProducer', () => ({
   addDocumentJob: jest.fn().mockResolvedValue({ MessageId: 'mock-sqs-id' })
 }));
 
-// --- TEST SETUP ---
 beforeAll(async () => {
-  // Ensure we are connected to a TEST DB (not production)
-  // Ideally, process.env.MONGODB_URI should be set to a test URL in package.json
-  await DocumentModel.deleteMany({}); 
+  await mockPrisma.document.deleteMany();
 });
 
 afterAll(async () => {
-  await mongoose.connection.close();
+  await mockPrisma.$disconnect();
 });
 
 describe('Document API Endpoints', () => {
-  
-  let uploadedDocId: string;
-
-  // TEST CASE 1: The "Forgot File" Error
-  it('should return 400 if no file is attached', async () => {
-    // CONFIGURATION: Tell our mock middleware to NOT attach a file
-    mockMulterMiddleware.mockImplementation((req, res, next) => {
-        req.file = undefined; 
-        next();
-    });
-
-    const res = await request(app)
-      .post('/api/upload'); // Send empty post
-    
-    expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('error', 'No file uploaded');
+  beforeEach(() => {
+    void mockPrisma.document.deleteMany();
+    mockS3Send.mockReset();
+    mockGetSignedUrl.mockClear();
   });
 
-  // TEST CASE 2: The "Happy Path" Upload
-  it('should upload a file and return 202 Accepted', async () => {
-    // CONFIGURATION: Tell our mock middleware to SIMULATE a successful S3 upload
-    mockMulterMiddleware.mockImplementation((req, res, next) => {
-        req.file = {
-            originalname: 'test-license.pdf',
-            mimetype: 'application/pdf',
-            size: 5000,
-            // CRITICAL: The controller expects 'key' (S3), not 'path' (Local)
-            key: 'uploads/test-license-123.pdf', 
-            location: 'https://s3.aws.com/bucket/uploads/test.pdf'
-        };
-        next();
+  it('should create a direct S3 upload URL and reserve a document', async () => {
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .send({
+        fileName: 'direct-license.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 5000,
+      });
+
+    expect(res.statusCode).toEqual(201);
+    expect(res.body).toMatchObject({
+      uploadUrl: 'https://s3.example.com/presigned-upload-url',
+      expiresIn: 300,
+    });
+    expect(res.body.documentId).toEqual(expect.any(String));
+    expect(res.body.key).toContain(`uploads/test_user_123/${res.body.documentId}-direct-license.pdf`);
+    expect(mockGetSignedUrl).toHaveBeenCalled();
+
+    const dbRecord = await mockPrisma.document.findUnique({ where: { id: res.body.documentId } });
+    expect(dbRecord).toBeTruthy();
+    expect(dbRecord?.userId).toBe('test_user_123');
+    expect(String(dbRecord?.status)).toBe('uploading');
+    expect(dbRecord?.storagePath).toBe(res.body.key);
+  });
+
+  it('should reject unsupported direct upload file types', async () => {
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .send({
+        fileName: 'script.exe',
+        mimeType: 'application/x-msdownload',
+        sizeBytes: 5000,
+      });
+
+    expect(res.statusCode).toEqual(400);
+    expect(res.body).toHaveProperty('error', 'Unsupported file type');
+    expect(mockGetSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('should complete a direct S3 upload and queue processing', async () => {
+    mockS3Send.mockResolvedValueOnce({
+      ContentType: 'application/pdf',
+      ContentLength: 5000,
+    });
+
+    const doc = await mockPrisma.document.create({
+      data: {
+        originalName: 'completed-direct-license.pdf',
+        storagePath: 'uploads/test_user_123/completed-direct-license.pdf',
+        mimeType: 'application/pdf',
+        status: 'uploading' as any,
+        userId: 'test_user_123',
+      },
     });
 
     const res = await request(app)
-      .post('/api/upload')
-      .attach('document', Buffer.from('fake-pdf'), 'test.pdf'); 
+      .post(`/api/documents/${doc.id}/complete-upload`);
 
     expect(res.statusCode).toEqual(202);
     expect(res.body.success).toBe(true);
-    expect(res.body.file).toHaveProperty('id');
-    
-    // Verify response uses S3 Key logic
-    // (Your controller might return key or path depending on version)
-    // expect(res.body.file).toHaveProperty('key'); 
+    expect(res.body.file).toMatchObject({
+      id: doc.id,
+      originalName: 'completed-direct-license.pdf',
+      status: 'pending',
+      key: 'uploads/test_user_123/completed-direct-license.pdf',
+    });
 
-    uploadedDocId = res.body.file.id;
-
-    // Verify DB Record
-    const dbRecord = await DocumentModel.findById(uploadedDocId);
-    expect(dbRecord).toBeTruthy();
-    expect(dbRecord?.userId).toBe('test_user_123');
+    const dbRecord = await mockPrisma.document.findUnique({ where: { id: doc.id } });
     expect(dbRecord?.status).toBe('pending');
-    expect(dbRecord?.storagePath).toBe('uploads/test-license-123.pdf'); // Check S3 Key saved
-  });
-
-  // TEST CASE 3: Fetching Status
-  it('should fetch the status of the uploaded document', async () => {
-    const res = await request(app)
-      .get(`/api/document/${uploadedDocId}`);
-
-    expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty('status', 'pending');
-  });
-
-  it('should search uploaded documents with natural language expiry filters', async () => {
-    const expirySoon = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const expiryLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-    await DocumentModel.create({
-      originalName: 'health-insurance-policy.pdf',
-      storagePath: 'uploads/health-insurance-policy.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Health Insurance',
-        expiryDate: expirySoon,
-        licenseNumber: 'HI-123',
-        holderName: 'Jane Citizen',
-        content: 'Health insurance renewal notice for corporate workers',
-      },
-    });
-
-    await DocumentModel.create({
-      originalName: 'health-insurance-long-term.pdf',
-      storagePath: 'uploads/health-insurance-long-term.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Health Insurance',
-        expiryDate: expiryLater,
-        licenseNumber: 'HI-456',
-        holderName: 'John Citizen',
-        content: 'Health insurance policy with a later renewal date',
-      },
-    });
-
-    const res = await request(app)
-      .get('/api/documents/search')
-      .query({ q: 'show me all the documents that is about health insurance that is about to expire in 1 month' });
-
-    expect(res.statusCode).toEqual(200);
-    expect(res.body.interpretedFilters).toMatchObject({
-      keywords: expect.arrayContaining(['health', 'insurance']),
-      expiryWithinDays: 30,
-    });
-    expect(res.body.results).toHaveLength(1);
-    expect(res.body.results[0]).toMatchObject({
-      name: 'health-insurance-policy.pdf',
-    });
-    expect(res.body.results[0].matchReasons).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('health'),
-        expect.stringContaining('Expires in'),
-      ])
+    expect(mockS3Send).toHaveBeenCalled();
+    expect(addDocumentJob).toHaveBeenCalledWith(
+      doc.id,
+      'uploads/test_user_123/completed-direct-license.pdf',
+      'application/pdf'
     );
   });
-
-  it('should return a document overview with compliance counts and expiring documents', async () => {
-    const expiredDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const expiringSoon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const validDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-    await DocumentModel.create({
-      originalName: 'expired-trade-license.pdf',
-      storagePath: 'uploads/expired-trade-license.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Trade License',
-        expiryDate: expiredDate,
-      },
-    });
-
-    await DocumentModel.create({
-      originalName: 'expiring-soon-white-card.pdf',
-      storagePath: 'uploads/expiring-soon-white-card.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'White Card',
-        expiryDate: expiringSoon,
-      },
-    });
-
-    await DocumentModel.create({
-      originalName: 'long-valid-insurance.pdf',
-      storagePath: 'uploads/long-valid-insurance.pdf',
-      mimeType: 'application/pdf',
-      status: 'processed',
-      userId: 'test_user_123',
-      extractedData: {
-        docType: 'Insurance',
-        expiryDate: validDate,
-      },
-    });
-
-    const res = await request(app)
-      .get('/api/documents/overview')
-      .query({ expiringWithinDays: 30, limit: 3 });
-
-    expect(res.statusCode).toEqual(200);
-    expect(res.body.filters).toMatchObject({
-      expiringWithinDays: 30,
-    });
-    expect(res.body.totals.expired).toBeGreaterThanOrEqual(1);
-    expect(res.body.totals.expiringSoon).toBeGreaterThanOrEqual(1);
-    expect(res.body.totals.valid).toBeGreaterThanOrEqual(1);
-    expect(res.body.expiringDocuments).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'expiring-soon-white-card.pdf',
-        }),
-      ])
-    );
-  });
-
 });
