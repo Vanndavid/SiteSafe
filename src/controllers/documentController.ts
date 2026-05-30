@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 // import { addDocumentJob } from '../queues/documentQueue';
 import { addDocumentJob } from '../queues/sqsProducer'; //AWS SQS version
 import prisma from '../config/prisma';
+import type { Document } from '@prisma/client';
 import type { ExtractedDocumentData } from '../models/Document';
 import { randomUUID } from 'crypto';
 
@@ -416,7 +417,7 @@ export const updateDocumentProcessingResult = async (req: Request, res: Response
 export const getAllDocuments = async (req: Request, res: Response) => {
   try {
     // Get last 20 docs, newest first
-    const docs = await prisma.document.findMany({
+    const docs: Document[] = await prisma.document.findMany({
       orderBy: { uploadDate: 'desc' },
       take: 20,
     });
@@ -442,7 +443,13 @@ export const getDocumentOverview = async (req: Request, res: Response) => {
     const expiringWithinDays = parsePositiveInt(req.query.expiringWithinDays, 30);
     const limit = parsePositiveInt(req.query.limit, 5);
 
-    const docs = await prisma.document.findMany({
+    const docs: Document[] = await prisma.document.findMany({
+      select: {
+        id: true,
+        originalName: true,
+        status: true,
+        extractedData: true,
+      },
       orderBy: { uploadDate: 'desc' },
       take: 500,
     });
@@ -539,7 +546,7 @@ export const searchDocuments = async (req: Request, res: Response) => {
     const keywordTerms = tokenizeSearchTerms(query);
     const expiryWindowDays = extractExpiryWindowDays(query);
 
-    const docs = await prisma.document.findMany({
+    const docs: Document[] = await prisma.document.findMany({
       where: { status: 'processed' },
       orderBy: { uploadDate: 'desc' },
       take: 100,
