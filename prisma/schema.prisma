@@ -22,7 +22,7 @@ enum NotificationType {
 
 model Document {
   id            String         @id @default(uuid())
-  userId        String?
+  userId        String
   userEmail     String?
   originalName  String
   storagePath   String
@@ -41,7 +41,7 @@ model Notification {
   docId     String?
   createdAt DateTime         @default(now())
   read      Boolean          @default(false)
-  userId    String?
+  userId    String
 
   @@index([userId])
 }
