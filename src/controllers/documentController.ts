@@ -12,9 +12,10 @@ import {
   getDocumentStatusById,
   markDocumentPendingAndQueue,
   searchProcessedDocuments,
-  updateDocumentProcessingResult as updateDocumentProcessingResultService,
 } from '../services/documentService';
 import { getUnreadNotifications, markNotificationRead } from '../services/notificationService';
+import type { ExtractedDocumentData } from '../models/Document';
+import { DocumentStatus } from '@prisma/client';
 
 type UploadedFileData = {
   originalname: string;
@@ -178,13 +179,17 @@ export const updateDocumentProcessingResult = async (req: Request, res: Response
       return res.status(400).json({ error: 'Document id is required' });
     }
 
-    const { status, extractedData } = req.body as { status?: string; extractedData?: any };
+    const { status, extractedData } = req.body as { status: DocumentStatus; extractedData: ExtractedDocumentData };
     if (status !== 'processed' && status !== 'failed') {
       return res.status(400).json({ error: 'Invalid processing status' });
     }
 
-    const updatedDoc = await updateDocumentProcessingResultService(id, status, extractedData);
-
+    var data = { status: status, extractedData: extractedData };
+    const updatedDoc = await prisma.document.update({
+        where: { id },
+        data: data,
+    });
+   
     res.json({
       success: true,
       document: {
