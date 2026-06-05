@@ -3,7 +3,7 @@ import prisma from '../config/prisma';
 import { getRequestUserId } from '../utils/authUtils';
 import { validateUploadIntent, MAX_UPLOAD_SIZE_BYTES } from '../utils/fileUtils';
 import { parsePositiveInt } from '../utils/numberUtils';
-import { getObjectHead, generatePresignedDownloadUrl } from '../services/storageService';
+import { getObjectHead, generatePresignedDownloadUrl, deleteObject } from '../services/storageService';
 import {
   createPendingDocumentRecord,
   createUploadIntent,
@@ -91,12 +91,16 @@ export const createDocumentUploadUrl = async (req: Request, res: Response) => {
 
 // POST /api/documents/:id/complete-upload
 export const completeDocumentUpload = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: 'Document id is required' });
-    }
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Document id is required' });
+  }
+  // We track this outside the try block so the catch block knows exactly what to delete
+  let storagePathToDelete: string | null = null;
 
+  try {
+    //This part, if there is an error, document will be stored in s3 without ever being used. 
+    //We need to delete document from s3 if there is any error in this process. We can do that in the catch block.
     const userId = getRequestUserId(req);
     const doc = await prisma.document.findUnique({ where: { id } });
 
@@ -107,14 +111,17 @@ export const completeDocumentUpload = async (req: Request, res: Response) => {
     if (String(doc.status) !== UPLOADING_DOCUMENT_STATUS) {
       return res.status(409).json({ error: `Document upload is already ${doc.status}` });
     }
-
+    storagePathToDelete = doc.storagePath; // Set the path to delete in case of any error
+    
     const headResult = await getObjectHead(doc.storagePath);
 
-    if (headResult.ContentType && headResult.ContentType !== doc.mimeType) {
+    if (headResult.ContentType && headResult.ContentType !== doc.mimeType) {   
+      await deleteObject(doc.storagePath); // Clean up immediately
       return res.status(400).json({ error: 'Uploaded file type does not match reserved file type' });
     }
 
     if (headResult.ContentLength && headResult.ContentLength > MAX_UPLOAD_SIZE_BYTES) {
+      await deleteObject(doc.storagePath); // Clean up immediately
       return res.status(400).json({ error: 'Uploaded file is too large' });
     }
 
@@ -131,12 +138,15 @@ export const completeDocumentUpload = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Failed to complete upload:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to complete upload',
-      details: (error as Error).message,
-    });
+      if (storagePathToDelete) {
+        await deleteObject(storagePathToDelete); // Clean up immediately
+      }
+      console.error('Failed to complete upload:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to complete upload',
+        details: (error as Error).message,
+      });
   }
 };
 
