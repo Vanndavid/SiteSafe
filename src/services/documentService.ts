@@ -172,17 +172,4 @@ export const searchProcessedDocuments = async (query: string) => {
   };
 };
 
-export const updateDocumentProcessingResult = async (
-  id: string,
-  status: 'processed' | 'failed',
-  extractedData?: ExtractedDocumentData,
-) => {
-  const data = status === 'processed'
-    ? { status, extractedData: extractedData || {} }
-    : { status };
 
-  return prisma.document.update({
-    where: { id },
-    data,
-  });
-};
