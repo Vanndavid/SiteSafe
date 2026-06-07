@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, TextField, Typography } from '@mui/material';
 import { Header } from './components/Header';
-import { UploadArea } from './components/UploadArea';
 import { DocumentList } from './components/DocumentList';
 import { NotificationPanel } from './components/NotificationPanel';
 import { useAuth, api } from './auth/AuthContext';
-import type { DocumentItem, NotificationItem } from './types';
+import type { DocumentItem, NotificationItem, ProjectItem } from './types';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import { Fab, Tooltip } from '@mui/material';
 import LandingPage from './components/LandingPage';
@@ -20,6 +19,8 @@ interface UploadUrlResponse {
 export default function App() {
   const { isAuthenticated, isLoading } = useAuth();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -27,10 +28,17 @@ export default function App() {
   const [searching, setSearching] = useState(false);
   const [searchSummary, setSearchSummary] = useState<string | null>(null);
 
-  const fetchDocuments = async () => {
-    const res = await api.get('/api/documents');
-    setDocuments(res.data);
+  const fetchProjects = async () => {
+    const res = await api.get<{ projects: ProjectItem[] }>('/api/projects');
+    setProjects(res.data.projects);
+    return res.data.projects;
   };
+
+  const fetchDocuments = useCallback(async (projectId?: number | null) => {
+    const params = projectId != null ? { projectId } : undefined;
+    const res = await api.get('/api/documents', { params });
+    setDocuments(res.data);
+  }, []);
 
   const fetchNotifications = async () => {
     try {
@@ -44,18 +52,36 @@ export default function App() {
   useEffect(() => {
     if (!isAuthenticated) {
       setDocuments([]);
+      setProjects([]);
+      setSelectedProjectId(null);
       setNotifications([]);
       return;
     }
 
-    void fetchDocuments();
+    void (async () => {
+      const loadedProjects = await fetchProjects();
+      if (loadedProjects.length > 0) {
+        setSelectedProjectId(loadedProjects[0].id);
+      }
+    })();
     void fetchNotifications();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || selectedProjectId == null) {
+      if (selectedProjectId == null) {
+        setDocuments([]);
+      }
+      return;
+    }
+
+    void fetchDocuments(selectedProjectId);
+  }, [isAuthenticated, selectedProjectId, fetchDocuments]);
 
   const searchDocuments = async () => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) {
-      await fetchDocuments();
+      await fetchDocuments(selectedProjectId);
       setSearchSummary(null);
       return;
     }
@@ -64,7 +90,12 @@ export default function App() {
     setError(null);
 
     try {
-      const res = await api.get('/api/documents/search', { params: { q: trimmedQuery } });
+      const res = await api.get('/api/documents/search', {
+        params: {
+          q: trimmedQuery,
+          ...(selectedProjectId != null ? { projectId: selectedProjectId } : {}),
+        },
+      });
       const data = res.data;
       setDocuments(data.results);
 
@@ -87,7 +118,7 @@ export default function App() {
     setSearchQuery('');
     setSearchSummary(null);
     setError(null);
-    await fetchDocuments();
+    await fetchDocuments(selectedProjectId);
   };
 
   const pollForStatus = (docId: string) => {
@@ -99,12 +130,10 @@ export default function App() {
         if (data.status === 'processed' || data.status === 'failed') {
           clearInterval(interval);
 
-          setDocuments(prev =>
-            prev.map(doc =>
-              doc.id === docId
-                ? { ...doc, status: data.status, extraction: data.extraction }
-                : doc
-            )
+          setDocuments((prev) =>
+            prev.map((doc) =>
+              doc.id === docId ? { ...doc, status: data.status, extraction: data.extraction } : doc,
+            ),
           );
         }
       } catch (err) {
@@ -114,10 +143,22 @@ export default function App() {
   };
 
   const handleNotificationRead = (id: string) => {
-    setNotifications(prev => prev.filter(n => n._id !== id));
+    setNotifications((prev) => prev.filter((n) => n._id !== id));
+  };
+
+  const handleCreateProject = async (name: string) => {
+    const res = await api.post<{ project: ProjectItem }>('/api/projects', { name });
+    const project = res.data.project;
+    setProjects((prev) => [project, ...prev]);
+    setSelectedProjectId(project.id);
   };
 
   const uploadFile = async (file: File) => {
+    if (selectedProjectId == null) {
+      setError('Select or create a project first');
+      return;
+    }
+
     setUploading(true);
     setError(null);
 
@@ -126,6 +167,7 @@ export default function App() {
         fileName: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
+        projectId: selectedProjectId,
       });
 
       const { documentId, key, uploadUrl } = uploadUrlRes.data;
@@ -144,9 +186,9 @@ export default function App() {
       const completeRes = await api.post(`/api/documents/${documentId}/complete-upload`);
       const data = completeRes.data;
 
-      setDocuments(prev => [
+      setDocuments((prev) => [
         { id: data.file.id, name: data.file.originalName, status: 'pending', storagePath: data.file.key ?? key },
-        ...prev
+        ...prev,
       ]);
       pollForStatus(data.file.id);
     } catch (err) {
@@ -176,7 +218,8 @@ export default function App() {
           </Typography>
 
           <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Automatically extracts expiry dates from uploaded documents, monitors them continuously, and reminds users before deadlines (e.g. 30 days before expiry) to reduce compliance risk and operational disruption.
+            Automatically extracts expiry dates from uploaded documents, monitors them continuously, and reminds users
+            before deadlines (e.g. 30 days before expiry) to reduce compliance risk and operational disruption.
             <Button
               variant="text"
               component="a"
@@ -194,7 +237,8 @@ export default function App() {
                 Search your uploaded files in chat
               </Typography>
               <Typography color="text.secondary">
-                Ask questions like “Show me all the documents about health insurance that are about to expire in 1 month.”
+                Ask questions like “Show me all the documents about health insurance that are about to expire in 1
+                month.”
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
@@ -219,8 +263,16 @@ export default function App() {
             </Stack>
           </Paper>
           <NotificationPanel notifications={notifications} onRead={handleNotificationRead} />
-          <UploadArea uploading={uploading} error={error} onUpload={uploadFile} />
-          <DocumentList documents={documents} />
+          <DocumentList
+            documents={documents}
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
+            onCreateProject={handleCreateProject}
+            onUpload={uploadFile}
+            uploading={uploading}
+            uploadError={error}
+          />
 
           <Tooltip title="View Source Code" arrow>
             <Fab

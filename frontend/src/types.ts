@@ -7,6 +7,12 @@ export interface AiExtraction {
   content?: string;
 }
 
+export interface ProjectItem {
+  id: number;
+  name: string;
+  description?: string | null;
+}
+
 export interface DocumentItem {
   id: string;
   name: string;

@@ -9,10 +9,18 @@ import { formatDocumentListItem } from '../utils/documentFormatter';
 import { computeDocumentOverview } from '../utils/overviewUtils';
 import type { Document } from '@prisma/client';
 import type { ExtractedDocumentData } from '../models/Document';
+import { getProjectForUser } from './projectService';
 
 const UPLOAD_URL_EXPIRY_SECONDS = 5 * 60;
 const MAX_OVERVIEW_RECORDS = 500;
-const DEFAULT_PROJECT_ID = 1;
+
+const assertProjectAccess = async (userId: string, projectId: number) => {
+  const project = await getProjectForUser(userId, projectId);
+  if (!project) {
+    throw new Error('Project not found');
+  }
+  return project;
+};
 
 export type UploadedFileData = {
   originalname: string;
@@ -20,7 +28,13 @@ export type UploadedFileData = {
   mimetype: string;
 };
 
-export const createPendingDocumentRecord = async (fileData: UploadedFileData, userId: string) => {
+export const createPendingDocumentRecord = async (
+  fileData: UploadedFileData,
+  userId: string,
+  projectId: number,
+) => {
+  await assertProjectAccess(userId, projectId);
+
   const newDoc = await prisma.document.create({
     data: {
       originalName: fileData.originalname,
@@ -28,7 +42,7 @@ export const createPendingDocumentRecord = async (fileData: UploadedFileData, us
       mimeType: fileData.mimetype,
       status: 'pending',
       userId,
-      projectId: DEFAULT_PROJECT_ID,
+      projectId,
     },
   });
 
@@ -39,7 +53,14 @@ export const createPendingDocumentRecord = async (fileData: UploadedFileData, us
   return newDoc;
 };
 
-export const createUploadIntent = async (userId: string, fileName: string, mimeType: string) => {
+export const createUploadIntent = async (
+  userId: string,
+  projectId: number,
+  fileName: string,
+  mimeType: string,
+) => {
+  await assertProjectAccess(userId, projectId);
+
   const documentId = randomUUID();
   const safeFileName = sanitizeFileName(fileName);
   const key = `uploads/${userId}/${documentId}-${safeFileName}`;
@@ -52,7 +73,7 @@ export const createUploadIntent = async (userId: string, fileName: string, mimeT
       mimeType,
       status: 'uploading',
       userId,
-      projectId: DEFAULT_PROJECT_ID,
+      projectId,
     },
   });
 
@@ -88,8 +109,12 @@ export const markDocumentPendingAndQueue = async (document: Document) => {
   return updatedDoc;
 };
 
-export const getAllDocuments = async () => {
+export const getAllDocuments = async (userId: string, projectId?: number) => {
   const docs: Document[] = await prisma.document.findMany({
+    where: {
+      userId,
+      ...(projectId != null ? { projectId } : {}),
+    },
     orderBy: { uploadDate: 'desc' },
     take: 20,
   });
@@ -119,12 +144,20 @@ export const getDocumentOverview = async (expiringWithinDays: number, limit: num
   return computeDocumentOverview(docs, expiringWithinDays, limit);
 };
 
-export const searchProcessedDocuments = async (query: string) => {
+export const searchProcessedDocuments = async (
+  userId: string,
+  query: string,
+  projectId?: number,
+) => {
   const keywordTerms = tokenizeSearchTerms(query);
   const expiryWindowDays = extractExpiryWindowDays(query);
 
   const docs = await prisma.document.findMany({
-    where: { status: 'processed' },
+    where: {
+      userId,
+      status: 'processed',
+      ...(projectId != null ? { projectId } : {}),
+    },
     orderBy: { uploadDate: 'desc' },
     take: 100,
   });

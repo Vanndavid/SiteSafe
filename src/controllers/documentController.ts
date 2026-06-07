@@ -39,12 +39,23 @@ export const uploadDocument = async (req: Request, res: Response) => {
 
   const fileData = req.file as any;
   console.log('File uploaded to S3 with key:', fileData);
-  const userId = 'test_user_123';
+  const userId = getRequestUserId(req);
+  const projectId = parsePositiveInt(req.body?.projectId, 0);
+
+  if (!projectId) {
+    res.status(400).json({ error: 'projectId is required' });
+    return;
+  }
+
   console.log('Fetching documents for user:', userId);
   console.log(`Received file key: ${fileData.key}`);
 
   try {
-    const newDoc = await createPendingDocumentRecord(fileData as UploadedFileData, userId);
+    const newDoc = await createPendingDocumentRecord(
+      fileData as UploadedFileData,
+      userId,
+      projectId,
+    );
     res.status(202).json({
       success: true,
       message: 'Upload accepted. Processing in background.',
@@ -67,19 +78,28 @@ export const uploadDocument = async (req: Request, res: Response) => {
 
 // POST /api/documents/upload-url
 export const createDocumentUploadUrl = async (req: Request, res: Response) => {
-  const { fileName, mimeType, sizeBytes } = req.body || {};
+  const { fileName, mimeType, sizeBytes, projectId } = req.body || {};
   const validationError = validateUploadIntent(fileName, mimeType, sizeBytes);
 
   if (validationError) {
     return res.status(400).json({ error: validationError });
   }
 
+  const parsedProjectId = parsePositiveInt(projectId, 0);
+  if (!parsedProjectId) {
+    return res.status(400).json({ error: 'projectId is required' });
+  }
+
   try {
     const userId = getRequestUserId(req);
-    const uploadIntent = await createUploadIntent(userId, fileName, mimeType);
+    const uploadIntent = await createUploadIntent(userId, parsedProjectId, fileName, mimeType);
 
     res.status(201).json(uploadIntent);
   } catch (error) {
+    if ((error as Error).message === 'Project not found') {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
     console.error('Failed to create upload URL:', error);
     res.status(500).json({
       success: false,
@@ -214,9 +234,16 @@ export const updateDocumentProcessingResult = async (req: Request, res: Response
 };
 
 // --- NEW: Get All Documents (History) ---
-export const getAllDocuments = async (_req: Request, res: Response) => {
+export const getAllDocuments = async (req: Request, res: Response) => {
   try {
-    const formattedDocs = await fetchAllDocumentsService();
+    const userId = getRequestUserId(req);
+    const rawProjectId = req.query.projectId;
+    const projectId =
+      typeof rawProjectId === 'string'
+        ? parsePositiveInt(rawProjectId, 0) || undefined
+        : undefined;
+
+    const formattedDocs = await fetchAllDocumentsService(userId, projectId);
     res.json(formattedDocs);
   } catch (error) {
     console.error(error);
@@ -244,7 +271,14 @@ export const searchDocuments = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
-    const results = await searchProcessedDocuments(query);
+    const userId = getRequestUserId(req);
+    const rawProjectId = req.query.projectId;
+    const projectId =
+      typeof rawProjectId === 'string'
+        ? parsePositiveInt(rawProjectId, 0) || undefined
+        : undefined;
+
+    const results = await searchProcessedDocuments(userId, query, projectId);
     res.json(results);
   } catch (error) {
     console.error(error);
