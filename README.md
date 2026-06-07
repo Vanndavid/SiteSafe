@@ -264,12 +264,14 @@ JWT_REFRESH_TOKEN_TTL=7d
 
 All other protected API routes require `Authorization: Bearer <accessToken>`.
 
-### Frontend integration checklist
+### Frontend integration
 
-- Store the access token in memory only (not `localStorage` or `sessionStorage`)
-- Set `withCredentials: true` on refresh/logout requests so the httpOnly cookie is sent
-- On `401`, call `POST /api/auth/refresh` and retry the original request
-- Remove Clerk from the frontend and call these endpoints instead
+The React app uses in-memory JWT auth via `AuthProvider`:
+
+- Sign in / register from the header dialog
+- `TRY DEMO` logs in or registers `demo@mail.com`
+- Access tokens stay in memory; refresh uses an httpOnly cookie
+- On `401`, the API client refreshes the session and retries
 
 ---
 

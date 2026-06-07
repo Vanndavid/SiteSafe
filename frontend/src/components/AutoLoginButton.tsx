@@ -1,74 +1,60 @@
-import { useSignIn } from "@clerk/clerk-react";
-import { Button, keyframes } from '@mui/material';
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
+import { Button, keyframes, Stack } from '@mui/material';
+import { useAuth } from '../auth/AuthContext';
 
-export const AutoLoginButton = ({disablePulse=false}) => {
-  const { signIn, setActive, isLoaded } = useSignIn();
+type AutoLoginButtonProps = {
+  disablePulse?: boolean;
+};
+
+export const AutoLoginButton = ({ disablePulse = false }: AutoLoginButtonProps) => {
+  const { demoLogin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+
   const handleGuestLogin = async () => {
-    if (!isLoaded) return;
     setIsLoading(true);
+    setError(null);
 
     try {
-      // STEP 1: Start the Login Process (Identify the user)
-      const signInAttempt = await signIn.create({
-        identifier: "demo@mail.com",
-      });
-
-      // STEP 2: Check if it needs a password (It usually does)
-      if (signInAttempt.status === "needs_first_factor") {
-        
-        // STEP 3: Send the Password automatically
-        const completeSignIn = await signInAttempt.attemptFirstFactor({
-          strategy: "password",
-          password: "dem@123!", // The password you set in Dashboard
-        });
-        // STEP 4: Activate the Session
-        if (completeSignIn.status === "complete") {
-        await setActive({ session: completeSignIn.createdSessionId });
-        navigate("/");
-        } else {
-        console.error("Login stuck:", completeSignIn);
-        }
-      } 
-      
-    } catch (err: any) {
-      console.error("Guest login failed:", err.errors ? err.errors[0].message : err);
-      alert("Demo Login Failed: " + (err.errors ? err.errors[0].longMessage : "Unknown Error"));
+      await demoLogin();
+    } catch (err) {
+      console.error('Demo login failed:', err);
+      setError('Demo login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
   const pulse = keyframes`
     0% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.02); opacity: 0.8; color: #cfe5f1; }
     100% { transform: scale(1); opacity: 1; }
-    `;
+  `;
 
   return (
-    <Button
-        onClick={handleGuestLogin}
+    <Stack spacing={1} alignItems="center">
+      <Button
+        onClick={() => void handleGuestLogin()}
         disabled={isLoading}
-        variant={disablePulse ? "contained" : "text"}
+        variant={disablePulse ? 'contained' : 'text'}
         sx={{
-        px: 4, py: 1.5, fontWeight: 600, 
-        color: 'white',
-        // Apply the animation: 2 seconds, ease-in-out timing, infinite loop
-        animation: (!isLoading && !disablePulse) ? `${pulse} 1.5s ease-in-out infinite` : 'none',
-        '&:hover': {
-          animation: 'none', // Optional: stop flashing when user hovers
-        },
-      }}
-    >
-      {isLoading ? (
-        <span>Logging in...</span> 
-      ) : (
-        <>
-          <span>TRY DEMO</span>
-        </>
+          px: 4,
+          py: 1.5,
+          fontWeight: 600,
+          color: 'white',
+          animation: !isLoading && !disablePulse ? `${pulse} 1.5s ease-in-out infinite` : 'none',
+          '&:hover': {
+            animation: 'none',
+          },
+        }}
+      >
+        {isLoading ? 'Logging in…' : 'TRY DEMO'}
+      </Button>
+      {error && (
+        <Button size="small" color="inherit" disabled sx={{ color: '#fecaca', textTransform: 'none' }}>
+          {error}
+        </Button>
       )}
-    </Button>
+    </Stack>
   );
 };
