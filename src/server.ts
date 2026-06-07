@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import connectDB from './config/db';
 import apiRoutes from './routes/api';
 import { startScheduler } from './services/scheduler';
-import { clerkMiddleware } from '@clerk/express';
 
 dotenv.config();
 
@@ -22,8 +22,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-app.use(clerkMiddleware());
+app.use(cookieParser());
 app.use('/api', apiRoutes);
 
 app.get('/', (req, res) => {

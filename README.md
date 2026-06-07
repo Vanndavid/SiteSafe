@@ -215,7 +215,7 @@ Design decisions here are deliberate compromises between speed-to-value for a pr
 
 ### Phase 5 – The "SaaS" Architecture
 - [x] Test Case
-- [x] Authentication (Clerk)
+- [x] Authentication (JWT)
 - [ ] WebSocket
 - [ ] Multi-Tenancy (Organization and team members)
 - [x] Payments (Stripe Checkout)
@@ -224,7 +224,7 @@ Design decisions here are deliberate compromises between speed-to-value for a pr
 Payments now use a hosted Stripe Checkout flow:
 
 - Signed-in users can start a subscription checkout session from the dashboard
-- The backend creates the Stripe Checkout session with the authenticated Clerk user attached as metadata
+- The backend creates the Stripe Checkout session with the authenticated user attached as metadata
 - Billing URLs are environment-driven so local, staging, and production environments can each return to the correct frontend
 
 What is still intentionally left for the next SaaS step:
@@ -237,6 +237,41 @@ What is still intentionally left for the next SaaS step:
 - [x] Landing Page
 - [ ] Email/Phone Notifications
 **Goal:** Make it look production-ready
+
+---
+
+## Authentication API (JWT)
+
+The backend uses email/password auth with short-lived access tokens and httpOnly refresh cookies. Refresh token IDs are tracked in memory (sessions reset on server restart).
+
+### Environment variables
+
+```env
+JWT_SECRET=replace_with_a_long_random_jwt_secret
+JWT_ACCESS_TOKEN_TTL=15m
+JWT_REFRESH_TOKEN_TTL=7d
+```
+
+### Endpoints
+
+| Endpoint | Auth | Request | Response |
+|----------|------|---------|----------|
+| `POST /api/auth/register` | Public | `{ name?, email, password }` | `{ accessToken, user }` + refresh cookie |
+| `POST /api/auth/login` | Public | `{ email, password }` | `{ accessToken, user }` + refresh cookie |
+| `POST /api/auth/refresh` | Cookie | Send `Cookie: refreshToken=...` | `{ accessToken, user }` + rotated refresh cookie |
+| `POST /api/auth/logout` | Cookie | Optional refresh cookie | `{ message }` |
+| `GET /api/auth/me` | Bearer | `Authorization: Bearer <accessToken>` | `{ user }` |
+
+All other protected API routes require `Authorization: Bearer <accessToken>`.
+
+### Frontend integration
+
+The React app uses in-memory JWT auth via `AuthProvider`:
+
+- Sign in / register from the header dialog
+- `TRY DEMO` logs in or registers `demo@mail.com`
+- Access tokens stay in memory; refresh uses an httpOnly cookie
+- On `401`, the API client refreshes the session and retries
 
 ---
 

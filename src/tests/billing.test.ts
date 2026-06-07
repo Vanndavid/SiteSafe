@@ -2,8 +2,6 @@ import request from 'supertest';
 
 const mockConnectDb = jest.fn();
 const mockStartScheduler = jest.fn();
-const mockFetch = jest.fn();
-let mockUserId: string | null = 'user_billing_123';
 
 jest.mock('../config/db', () => ({
   __esModule: true,
@@ -21,29 +19,21 @@ jest.mock('../config/s3uploader', () => ({
   },
 }));
 
-jest.mock('@clerk/express', () => ({
-  clerkMiddleware: () => (req: any, res: any, next: any) => next(),
-  getAuth: () => ({
-    sessionClaims: {
-      email: 'billing@example.com',
-    },
-    userId: mockUserId,
-  }),
-}));
-
 import app from '../server';
+import { bearerAuthHeader, createTestAccessToken } from './helpers/auth';
 
 describe('Billing API Endpoints', () => {
+  const mockFetch = jest.fn();
+
   beforeEach(() => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_123';
     process.env.STRIPE_PRICE_ID = 'price_123';
+    process.env.JWT_SECRET = 'test_jwt_secret';
     (global as typeof globalThis & { fetch: typeof mockFetch }).fetch = mockFetch;
     mockFetch.mockReset();
-    mockUserId = 'user_billing_123';
   });
 
   it('should reject checkout creation when the user is not authenticated', async () => {
-    mockUserId = null;
     const res = await request(app).post('/api/billing/checkout');
 
     expect(res.statusCode).toBe(401);
@@ -60,6 +50,7 @@ describe('Billing API Endpoints', () => {
 
     const res = await request(app)
       .post('/api/billing/checkout')
+      .set(bearerAuthHeader(createTestAccessToken({ userId: 'user_billing_123', email: 'billing@example.com' })))
       .set('Origin', 'http://localhost:5173');
 
     expect(res.statusCode).toBe(201);
