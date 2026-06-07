@@ -1,6 +1,6 @@
 type CreateCheckoutSessionInput = {
   cancelUrl: string;
-  clerkUserId: string;
+  userId: string;
   customerEmail?: string;
   priceId: string;
   successUrl: string;
@@ -17,7 +17,7 @@ const STRIPE_CHECKOUT_SESSIONS_URL = 'https://api.stripe.com/v1/checkout/session
 
 export const createStripeCheckoutSession = async ({
   cancelUrl,
-  clerkUserId,
+  userId,
   customerEmail,
   priceId,
   successUrl,
@@ -36,7 +36,7 @@ export const createStripeCheckoutSession = async ({
   formData.append('line_items[0][quantity]', '1');
   formData.append('allow_promotion_codes', 'true');
   formData.append('billing_address_collection', 'auto');
-  formData.append('metadata[clerkUserId]', clerkUserId);
+  formData.append('metadata[userId]', userId);
 
   if (customerEmail) {
     formData.append('customer_email', customerEmail);

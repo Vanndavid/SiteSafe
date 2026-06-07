@@ -12,6 +12,7 @@ import type { ExtractedDocumentData } from '../models/Document';
 
 const UPLOAD_URL_EXPIRY_SECONDS = 5 * 60;
 const MAX_OVERVIEW_RECORDS = 500;
+const DEFAULT_PROJECT_ID = 1;
 
 export type UploadedFileData = {
   originalname: string;
@@ -27,6 +28,7 @@ export const createPendingDocumentRecord = async (fileData: UploadedFileData, us
       mimeType: fileData.mimetype,
       status: 'pending',
       userId,
+      projectId: DEFAULT_PROJECT_ID,
     },
   });
 
@@ -50,6 +52,7 @@ export const createUploadIntent = async (userId: string, fileName: string, mimeT
       mimeType,
       status: 'uploading',
       userId,
+      projectId: DEFAULT_PROJECT_ID,
     },
   });
 

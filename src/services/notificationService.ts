@@ -9,8 +9,14 @@ export const getUnreadNotifications = async () => {
 };
 
 export const markNotificationRead = async (id: string) => {
+  const notificationId = Number(id);
+
+  if (!Number.isInteger(notificationId)) {
+    throw new Error('Invalid notification id');
+  }
+
   return prisma.notification.update({
-    where: { id },
+    where: { id: notificationId },
     data: { read: true },
   });
 };

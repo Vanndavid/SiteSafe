@@ -48,7 +48,7 @@ jobs:
         MONGODB_URI: mongodb://localhost:27017/tradecomply_test
         REDIS_HOST: localhost
         REDIS_PORT: 6379
-        CLERK_SECRET_KEY: mock_key_for_ci
+        JWT_SECRET: test_jwt_secret
         GEMINI_API_KEY: mock_key_for_ci
         AWS_BUCKET_NAME: dummy-bucket
         AWS_REGION: ap-southeast-2

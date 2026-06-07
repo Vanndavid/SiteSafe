@@ -20,28 +20,51 @@ enum NotificationType {
   SYSTEM_INFO
 }
 
+model User { 
+  id    String    @id @default(uuid())
+  name  String
+  email String    @unique
+  password String
+
+  documents Document[]
+  notifications Notification[]
+}
+
 model Document {
   id            String         @id @default(uuid())
   userId        String
-  userEmail     String?
   originalName  String
   storagePath   String
   mimeType      String
   uploadDate    DateTime       @default(now())
   status        DocumentStatus @default(pending)
   extractedData Json?
+  projectId     Int
+  notifications Notification[]
 
-  @@index([userId])
+  user          User           @relation(fields:[userId], references: [id])
+  project       Project          @relation(fields:[projectId], references: [id])
+}
+
+model Project {
+  id          Int   @id @default(autoincrement())
+  name        String
+  description String?
+
+  documents   Document[]
 }
 
 model Notification {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  message   String
-  docId     String?
-  createdAt DateTime         @default(now())
-  read      Boolean          @default(false)
-  userId    String
+  id         Int              @id @default(autoincrement())
+  type       NotificationType
+  message    String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime?         
+  read       Boolean          @default(false)
+  
+  documentId String
+  userId     String
 
-  @@index([userId])
+  user       User             @relation(fields:[userId], references: [id])
+  document   Document         @relation(fields:[documentId], references: [id])
 }
