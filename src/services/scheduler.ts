@@ -40,7 +40,7 @@ const checkExpiringDocuments = async () => {
           // Check if we already alerted recently (simple dedup)
           const exists = await prisma.notification.findFirst({
             where: {
-              docId: doc.id,
+              documentId: doc.id,
               type: 'EXPIRY_WARNING'
             }
           });
@@ -50,7 +50,7 @@ const checkExpiringDocuments = async () => {
               data: {
                 type: 'EXPIRY_WARNING',
                 message: `Action Required: ${extractedData?.docType || 'Document'} expires on ${extractedData?.expiryDate}`,
-                docId: doc.id,
+                documentId: doc.id,
                 userId: doc.userId,
               },
             });

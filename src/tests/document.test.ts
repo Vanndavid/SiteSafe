@@ -1,11 +1,6 @@
 import request from 'supertest';
 import app from '../server';
-
-jest.mock('@clerk/express', () => ({
-  clerkMiddleware: () => (req: any, res: any, next: any) => next(),
-  requireAuth: () => (req: any, res: any, next: any) => next(),
-  getAuth: () => ({ userId: 'test_user_123' }),
-}));
+import { bearerAuthHeader } from './helpers/auth';
 
 jest.mock('../services/documentService', () => ({
   createUploadIntent: jest.fn(),
@@ -15,7 +10,7 @@ import { createUploadIntent } from '../services/documentService';
 
 const mockedCreateUploadIntent =
   createUploadIntent as jest.MockedFunction<typeof createUploadIntent>;
-  
+
 describe('POST /api/documents/upload-url', () => {
   it('returns upload url for valid request', async () => {
     mockedCreateUploadIntent.mockResolvedValue({
@@ -27,6 +22,7 @@ describe('POST /api/documents/upload-url', () => {
 
     const res = await request(app)
       .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
       .send({
         fileName: 'file.pdf',
         sizeBytes: 1024,
@@ -38,9 +34,22 @@ describe('POST /api/documents/upload-url', () => {
     expect(res.body.uploadUrl).toBeDefined();
   });
 
+  it('rejects unauthenticated requests', async () => {
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .send({
+        fileName: 'file.pdf',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
   it('rejects unsupported file type', async () => {
     const res = await request(app)
       .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
       .send({
         fileName: 'file.exe',
         mimeType: 'application/x-msdownload',
@@ -56,6 +65,7 @@ describe('POST /api/documents/upload-url', () => {
 
     const res = await request(app)
       .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
       .send({
         fileName: 'file.pdf',
         sizeBytes: 1024,

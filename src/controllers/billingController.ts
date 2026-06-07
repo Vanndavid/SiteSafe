@@ -1,4 +1,3 @@
-import { getAuth } from '@clerk/express';
 import { Request, Response } from 'express';
 import { createStripeCheckoutSession } from '../services/stripeService';
 
@@ -8,7 +7,8 @@ const getFrontendOrigin = (req: Request) =>
   'http://localhost:5173';
 
 export const createCheckoutSession = async (req: Request, res: Response) => {
-  const { sessionClaims, userId } = getAuth(req);
+  const userId = req.auth?.userId;
+  const customerEmail = req.auth?.email;
 
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' });
@@ -23,17 +23,11 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
   }
 
   const frontendOrigin = getFrontendOrigin(req);
-  const customerEmail =
-    typeof sessionClaims?.email === 'string'
-      ? sessionClaims.email
-      : typeof sessionClaims?.email_address === 'string'
-        ? sessionClaims.email_address
-        : undefined;
 
   try {
     const url = await createStripeCheckoutSession({
       cancelUrl: process.env.BILLING_CANCEL_URL || `${frontendOrigin}/?billing=cancel`,
-      clerkUserId: userId,
+      userId,
       priceId,
       successUrl: process.env.BILLING_SUCCESS_URL || `${frontendOrigin}/?billing=success`,
       ...(customerEmail ? { customerEmail } : {}),
