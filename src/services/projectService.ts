@@ -37,6 +37,36 @@ export const createProject = async (userId: string, input: CreateProjectInput) =
   });
 };
 
+export const updateProject = async (userId: string, projectId: number, input: Partial<CreateProjectInput>) => {
+  if ((input.name !== undefined) && (input.description !== undefined)) {
+    return prisma.project.update({
+      where: { 
+        id: projectId,
+        userId: userId, // Enforces authorization check
+      },
+      data: {
+        name: input.name,
+        description: input.description,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+      },
+    });
+  }else{
+    throw new Error('Project name is required and description is required');
+  }
+
+}
+export const deleteProject = async (userId: string, projectId: number) => {
+  return prisma.project.delete({
+    where: {
+      id: projectId,
+      userId: userId, // Enforces authorization check
+    },
+  });
+}
 export const getProjectForUser = async (userId: string, projectId: number) => {
   return prisma.project.findFirst({
     where: { id: projectId, userId },

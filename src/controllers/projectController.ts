@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { getRequestUserId } from '../utils/authUtils';
-import { createProject, listProjectsForUser } from '../services/projectService';
+import { createProject, deleteProject, listProjectsForUser, updateProject } from '../services/projectService';
 
 export const getProjects = async (req: Request, res: Response) => {
   try {
@@ -33,3 +33,40 @@ export const createProjectHandler = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to create project' });
   }
 };
+
+export const editProjectHandler = async (req: Request, res: Response) => {
+  // Implementation for editing a project will go here
+  const projectId = parseInt(req.params.id?.toString() || '');
+  if (isNaN(projectId)) {
+    return res.status(400).json({ error: 'Invalid project ID' });
+  }
+  const userId = getRequestUserId(req);
+  const { name, description } = req.body || {};
+
+  updateProject(userId, projectId, {
+    name:  name ,
+    description: description , 
+  }).then((updatedProject) => {
+    res.json({ project: updatedProject });
+  }).catch((error) => {
+    console.error('Failed to edit project:', error);
+    res.status(500).json({ error: 'Failed to edit project' });
+  });
+};
+
+export const deleteProjectHandler = async (req: Request, res: Response) => {
+  // Implementation for deleting a project will go here
+  const projectId = parseInt(req.params.id?.toString() || '');
+  if (isNaN(projectId)) {
+    return res.status(400).json({ error: 'Invalid project ID' });
+  }
+  const userId = getRequestUserId(req);
+
+  deleteProject(userId, projectId).then(() => {
+    res.status(204).send();
+  }).catch((error) => {
+    console.error('Failed to delete project:', error);
+    res.status(500).json({ error: 'Failed to delete project' });
+  });  
+};
+
