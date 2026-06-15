@@ -1,11 +1,14 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 import { parsePositiveIntEnv } from '../utils/envUtils';
 
 const isRateLimitDisabled = () =>
   process.env.NODE_ENV === 'test' || process.env.DISABLE_RATE_LIMIT === 'true';
 
-const authenticatedKey = (req: Request) => req.auth?.userId || req.ip;
+const authenticatedKey = (req: Request) =>
+  req.auth?.userId
+    ? `user:${req.auth.userId}`
+    : `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || 'unknown')}`;
 
 const createLimiter = (options: {
   windowMs: number;
@@ -19,7 +22,7 @@ const createLimiter = (options: {
     standardHeaders: true,
     legacyHeaders: false,
     skip: () => isRateLimitDisabled(),
-    keyGenerator: options.keyGenerator,
+    ...(options.keyGenerator ? { keyGenerator: options.keyGenerator } : {}),
     message: { error: options.message },
   });
 
