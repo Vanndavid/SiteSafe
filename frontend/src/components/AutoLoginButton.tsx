@@ -7,9 +7,13 @@ type AutoLoginButtonProps = {
 };
 
 export const AutoLoginButton = ({ disablePulse = false }: AutoLoginButtonProps) => {
-  const { demoLogin } = useAuth();
+  const { demoLogin, isDemoEnabled } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!isDemoEnabled) {
+    return null;
+  }
 
   const handleGuestLogin = async () => {
     setIsLoading(true);
