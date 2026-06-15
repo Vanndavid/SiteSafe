@@ -14,6 +14,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isDemoEnabled: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -30,6 +31,7 @@ const applyAuthResponse = (data: AuthResponse, setUser: (user: AuthUser) => void
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isDemoEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true';
 
   const clearSession = useCallback(() => {
     setAccessToken(null);
@@ -91,6 +93,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [clearSession]);
 
   const demoLogin = useCallback(async () => {
+    if (!isDemoEnabled) {
+      throw new Error('Demo login is disabled');
+    }
+
     const demoEmail = 'demo@mail.com';
     const demoPassword = 'dem@123!';
 
@@ -99,19 +105,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       await register('Demo User', demoEmail, demoPassword);
     }
-  }, [login, register]);
+  }, [isDemoEnabled, login, register]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isAuthenticated: Boolean(user),
       isLoading,
+      isDemoEnabled,
       login,
       register,
       logout,
       demoLogin,
     }),
-    [demoLogin, isLoading, login, logout, register, user]
+    [demoLogin, isDemoEnabled, isLoading, login, logout, register, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

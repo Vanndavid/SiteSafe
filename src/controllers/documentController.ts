@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { getRequestUserId } from '../utils/authUtils';
 import { validateUploadIntent, MAX_UPLOAD_SIZE_BYTES } from '../utils/fileUtils';
+import { isHttpError } from '../utils/httpError';
 import { parsePositiveInt } from '../utils/numberUtils';
 import { getObjectHead, generatePresignedDownloadUrl, deleteObject } from '../services/storageService';
 import {
@@ -68,6 +69,14 @@ export const uploadDocument = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
+    if (isHttpError(error)) {
+      res.status(error.statusCode).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       error: 'Upload Failed',
@@ -98,6 +107,9 @@ export const createDocumentUploadUrl = async (req: Request, res: Response) => {
   } catch (error) {
     if ((error as Error).message === 'Project not found') {
       return res.status(404).json({ error: 'Project not found' });
+    }
+    if (isHttpError(error)) {
+      return res.status(error.statusCode).json({ error: error.message });
     }
 
     console.error('Failed to create upload URL:', error);
@@ -160,6 +172,9 @@ export const completeDocumentUpload = async (req: Request, res: Response) => {
   } catch (error) {
       if (storagePathToDelete) {
         await deleteObject(storagePathToDelete); // Clean up immediately
+      }
+      if (isHttpError(error)) {
+        return res.status(error.statusCode).json({ error: error.message });
       }
       console.error('Failed to complete upload:', error);
       res.status(500).json({
