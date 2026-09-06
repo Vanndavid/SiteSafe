@@ -5,9 +5,10 @@ import { login, logout, me, refresh, register } from '../controllers/authControl
 import { createCheckoutSession } from '../controllers/billingController';
 import { createProjectHandler, getProjects } from '../controllers/projectController';
 import { checkHealth, getDocumentStatus, getAllDocuments, getDocumentOverview, uploadDocument, getNotifications, markAsRead, downloadDocument, searchDocuments, updateDocumentProcessingResult, createDocumentUploadUrl, completeDocumentUpload } from '../controllers/documentController';
+import { askQuestion } from '../controllers/ragController';
 import { requireCaptcha } from '../middleware/captcha';
 import { requireAuth } from '../middleware/auth';
-import { authRateLimiter, uploadRateLimiter, workerCallbackRateLimiter } from '../middleware/rateLimit';
+import { askRateLimiter, authRateLimiter, uploadRateLimiter, workerCallbackRateLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.get('/document/:id', requireAuth, getDocumentStatus);
 router.get('/documents', requireAuth, getAllDocuments);
 router.get('/documents/overview', requireAuth, getDocumentOverview);
 router.get('/documents/search', requireAuth, searchDocuments);
+router.post('/ask', requireAuth, askRateLimiter, askQuestion);
 router.get('/notifications', requireAuth, getNotifications);
 router.patch('/notifications/:id/read', requireAuth, markAsRead);
 router.get('/download/*key', requireAuth, downloadDocument);

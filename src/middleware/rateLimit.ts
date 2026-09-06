@@ -39,6 +39,15 @@ export const uploadRateLimiter = createLimiter({
   message: 'Upload requests are temporarily rate limited. Please retry later.',
 });
 
+// Each /api/ask request spends two Gemini calls (one embedding, one
+// generation), so it is metered like uploads rather than left on the default.
+export const askRateLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: parsePositiveIntEnv(process.env.ASK_RATE_LIMIT_MAX, 30),
+  keyGenerator: authenticatedKey,
+  message: 'Question rate limit reached. Please try again shortly.',
+});
+
 export const workerCallbackRateLimiter = createLimiter({
   windowMs: 60 * 1000,
   max: parsePositiveIntEnv(process.env.WORKER_CALLBACK_RATE_LIMIT_MAX, 300),

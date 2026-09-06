@@ -1,0 +1,18 @@
+{
+  // Config for the runnable TypeScript entrypoints outside src/ (the eval
+  // harness and the reindex script). The base tsconfig only includes src/,
+  // and ts-node needs these paths in scope to type-check them.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src", "eval", "scripts"],
+  "exclude": ["frontend", "node_modules"],
+  "ts-node": {
+    "transpileOnly": false
+  }
+}

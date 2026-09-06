@@ -1,11 +1,13 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum DocumentStatus {
@@ -42,6 +44,7 @@ model Document {
   extractedData Json?
   projectId     Int
   notifications Notification[]
+  chunks        DocumentChunk[]
 
   user          User           @relation(fields:[userId], references: [id])
   project       Project          @relation(fields:[projectId], references: [id])
@@ -71,4 +74,44 @@ model Notification {
 
   user       User             @relation(fields:[userId], references: [id])
   document   Document         @relation(fields:[documentId], references: [id])
+}
+
+/// One retrievable window of a document's text.
+///
+/// `userId` and `projectId` are denormalised from Document on purpose: the
+/// vector and keyword searches run as raw SQL (Prisma cannot express the `<=>`
+/// operator or tsvector ranking), and keeping the access-control columns on
+/// this table lets the filter sit inside the same indexed query rather than
+/// being applied after the fact.
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  documentId String
+  userId     String
+  projectId  Int
+  chunkIndex Int
+  pageNumber Int
+  content    String
+
+  /// Denormalised from Document.originalName so the generated tsvector can
+  /// index it. Postgres generated columns cannot reference another table, and
+  /// the document name ("White Card - J Smith.pdf") often carries the only
+  /// occurrence of the document type near an expiry date.
+  documentName String
+  tokenCount Int
+  createdAt  DateTime @default(now())
+
+  /// vector(768) - gemini-embedding-001 truncated to 768 dimensions.
+  /// Unsupported because Prisma has no native pgvector type.
+  embedding Unsupported("vector(768)")?
+
+  /// Generated tsvector over the document name plus the chunk body, maintained
+  /// by Postgres. Defined in the migration; Prisma only needs to know it exists
+  /// so `prisma db pull` does not try to drop it.
+  searchVector Unsupported("tsvector")?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([userId])
+  @@index([documentId])
 }

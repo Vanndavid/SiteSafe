@@ -39,3 +39,6 @@ Thumbs.db
 #lambda
 lambdaWorker/node_modules/
 lambdaWorker.zip
+
+# Eval run artifact
+eval/results.json

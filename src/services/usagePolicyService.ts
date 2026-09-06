@@ -64,6 +64,33 @@ export const enforceUploadIntentPolicy = async (userId: string, userEmail?: stri
   }
 };
 
+/**
+ * Gate for question answering.
+ *
+ * Mirrors the blocked-user and paid-plan checks in enforceGeminiQueuePolicy so
+ * that asking questions cannot be used to reach Gemini by an account that is
+ * barred from document processing.
+ *
+ * It deliberately does not apply the daily counters: those count Document rows,
+ * and asking a question creates none. Volume on this route is bounded by
+ * askRateLimiter instead. A true per-day question quota would need its own
+ * counter, which is not built.
+ */
+export const enforceAskPolicy = async (userId: string, userEmail?: string) => {
+  const email = await resolveUserEmail(userId, userEmail);
+
+  if (isBlockedUser(userId, email)) {
+    throw new HttpError(403, 'Your account is not allowed to use AI features.');
+  }
+
+  if (REQUIRE_PAID_PLAN_FOR_GEMINI && !isPaidUser(userId, email)) {
+    throw new HttpError(
+      403,
+      'AI features are currently restricted to paid accounts. Please contact support.',
+    );
+  }
+};
+
 export const enforceGeminiQueuePolicy = async (userId: string, userEmail?: string) => {
   const email = await resolveUserEmail(userId, userEmail);
   if (isBlockedUser(userId, email)) {

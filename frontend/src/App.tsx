@@ -3,6 +3,7 @@ import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, TextFiel
 import { Header } from './components/Header';
 import { DocumentList } from './components/DocumentList';
 import { NotificationPanel } from './components/NotificationPanel';
+import { AskDocuments } from './components/AskDocuments';
 import { useAuth, api } from './auth/AuthContext';
 import type { DocumentItem, NotificationItem, ProjectItem } from './types';
 import GitHubIcon from '@mui/icons-material/GitHub';
@@ -262,6 +263,7 @@ export default function App() {
               {searchSummary && <Alert severity="info">{searchSummary}</Alert>}
             </Stack>
           </Paper>
+          <AskDocuments selectedProjectId={selectedProjectId} />
           <NotificationPanel notifications={notifications} onRead={handleNotificationRead} />
           <DocumentList
             documents={documents}
