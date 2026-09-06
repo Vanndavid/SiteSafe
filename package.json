@@ -13,7 +13,8 @@
     "test:watch": "jest --watch",
     "eval": "ts-node --project tsconfig.scripts.json eval/run.ts",
     "eval:seed": "ts-node --project tsconfig.scripts.json eval/seed.ts",
-    "rag:reindex": "ts-node --project tsconfig.scripts.json scripts/reindexDocuments.ts"
+    "rag:reindex": "ts-node --project tsconfig.scripts.json scripts/reindexDocuments.ts",
+    "rag:doctor": "ts-node --project tsconfig.scripts.json scripts/ragDoctor.ts"
   },
   "repository": {
     "type": "git",
@@ -63,6 +64,7 @@
     "prisma": "^6.19.3",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   }
