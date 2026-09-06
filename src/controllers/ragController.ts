@@ -3,6 +3,8 @@ import { Request, Response } from 'express';
 import { getRequestUserId } from '../utils/authUtils';
 import { parsePositiveInt } from '../utils/numberUtils';
 import { askDocuments } from '../services/ragAnswerService';
+import { enforceAskPolicy } from '../services/usagePolicyService';
+import { isHttpError } from '../utils/httpError';
 import { DEFAULT_TOP_K, type RetrievalMode } from '../services/retrievalService';
 
 const MAX_QUESTION_LENGTH = 500;
@@ -29,6 +31,8 @@ export const askQuestion = async (req: Request, res: Response) => {
 
   try {
     const userId = getRequestUserId(req);
+    await enforceAskPolicy(userId, req.auth?.email);
+
     const projectId = parsePositiveInt(req.body?.projectId, 0) || undefined;
     const topK = Math.min(parsePositiveInt(req.body?.topK, DEFAULT_TOP_K), MAX_TOP_K);
     const mode = parseMode(req.body?.mode);
@@ -42,6 +46,10 @@ export const askQuestion = async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error) {
+    if (isHttpError(error)) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+
     console.error('Failed to answer question:', error);
     res.status(500).json({ error: 'Failed to answer question' });
   }

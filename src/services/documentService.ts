@@ -7,6 +7,7 @@ import { daysUntilExpiry } from '../utils/dateUtils';
 import { sanitizeFileName } from '../utils/fileUtils';
 import { formatDocumentListItem } from '../utils/documentFormatter';
 import { computeDocumentOverview } from '../utils/overviewUtils';
+import { enforceGeminiQueuePolicy, enforceUploadIntentPolicy } from './usagePolicyService';
 import type { Document } from '@prisma/client';
 import type { ExtractedDocumentData } from '../models/Document';
 import { getProjectForUser } from './projectService';
@@ -34,6 +35,7 @@ export const createPendingDocumentRecord = async (
   projectId: number,
 ) => {
   await assertProjectAccess(userId, projectId);
+  await enforceGeminiQueuePolicy(userId);
 
   const newDoc = await prisma.document.create({
     data: {
@@ -60,6 +62,7 @@ export const createUploadIntent = async (
   mimeType: string,
 ) => {
   await assertProjectAccess(userId, projectId);
+  await enforceUploadIntentPolicy(userId);
 
   const documentId = randomUUID();
   const safeFileName = sanitizeFileName(fileName);
@@ -97,6 +100,8 @@ export const createUploadIntent = async (
 };
 
 export const markDocumentPendingAndQueue = async (document: Document) => {
+  await enforceGeminiQueuePolicy(document.userId);
+
   const updatedDoc = await prisma.document.update({
     where: { id: document.id },
     data: { status: 'pending' },

@@ -262,6 +262,38 @@ JWT_ACCESS_TOKEN_TTL=15m
 JWT_REFRESH_TOKEN_TTL=7d
 ```
 
+### Abuse-prevention controls (recommended for production)
+
+The API now supports layered controls to prevent automated abuse of Gemini endpoints:
+
+```env
+# API throttling
+AUTH_RATE_LIMIT_MAX=30
+UPLOAD_RATE_LIMIT_MAX=40
+WORKER_CALLBACK_RATE_LIMIT_MAX=300
+
+# CAPTCHA (Cloudflare Turnstile by default)
+CAPTCHA_ENABLED=true
+CAPTCHA_SECRET_KEY=replace_with_turnstile_secret
+CAPTCHA_VERIFY_URL=https://challenges.cloudflare.com/turnstile/v0/siteverify
+
+# AI usage quotas / entitlement controls
+FREE_DAILY_GEMINI_LIMIT=25
+PAID_DAILY_GEMINI_LIMIT=300
+MAX_PENDING_DOCUMENTS_PER_USER=10
+MAX_DAILY_UPLOAD_INTENTS_PER_USER=60
+REQUIRE_PAID_PLAN_FOR_GEMINI=false
+PAID_USER_IDS=
+PAID_USER_EMAILS=
+BLOCKED_USER_IDS=
+BLOCKED_USER_EMAILS=
+```
+
+Notes:
+- `CAPTCHA_ENABLED=true` requires clients to provide `captchaToken` (body) or `x-captcha-token` (header) on auth endpoints.
+- Demo login in the frontend is disabled in production unless `VITE_ENABLE_DEMO_LOGIN=true`.
+- AI queueing now fails fast with `403/429` when a user is blocked or exceeds quota.
+
 ### Endpoints
 
 | Endpoint | Auth | Request | Response |

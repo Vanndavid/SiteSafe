@@ -7,9 +7,16 @@ jest.mock('../services/ragAnswerService', () => ({
   NOT_FOUND_ANSWER: 'Not found in your documents.',
 }));
 
+jest.mock('../services/usagePolicyService', () => ({
+  enforceAskPolicy: jest.fn(),
+}));
+
 import { askDocuments } from '../services/ragAnswerService';
+import { enforceAskPolicy } from '../services/usagePolicyService';
+import { HttpError } from '../utils/httpError';
 
 const mockedAskDocuments = askDocuments as jest.MockedFunction<typeof askDocuments>;
+const mockedEnforceAskPolicy = enforceAskPolicy as jest.MockedFunction<typeof enforceAskPolicy>;
 
 const answerFixture = {
   question: 'When does the white card expire?',
@@ -110,5 +117,43 @@ describe('POST /api/ask', () => {
 
     const options = mockedAskDocuments.mock.calls[0]![1];
     expect(options).not.toHaveProperty('mode');
+  });
+
+  it('enforces the usage policy before spending any Gemini calls', async () => {
+    mockedAskDocuments.mockResolvedValue(answerFixture);
+
+    await request(app)
+      .post('/api/ask')
+      .set(bearerAuthHeader())
+      .send({ question: 'When does the white card expire?' });
+
+    expect(mockedEnforceAskPolicy).toHaveBeenCalledWith('test_user_123', expect.anything());
+  });
+
+  it('rejects a blocked account without calling the model', async () => {
+    mockedEnforceAskPolicy.mockRejectedValue(
+      new HttpError(403, 'Your account is not allowed to use AI features.'),
+    );
+
+    const res = await request(app)
+      .post('/api/ask')
+      .set(bearerAuthHeader())
+      .send({ question: 'When does the white card expire?' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('not allowed');
+    expect(mockedAskDocuments).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a quota rejection as 429 rather than 500', async () => {
+    mockedEnforceAskPolicy.mockRejectedValue(new HttpError(429, 'Daily quota reached.'));
+
+    const res = await request(app)
+      .post('/api/ask')
+      .set(bearerAuthHeader())
+      .send({ question: 'When does the white card expire?' });
+
+    expect(res.status).toBe(429);
+    expect(mockedAskDocuments).not.toHaveBeenCalled();
   });
 });
