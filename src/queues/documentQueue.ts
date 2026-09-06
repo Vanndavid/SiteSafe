@@ -1,3 +1,4 @@
+// this is local queue using BullMQ and Redis, this will be replaced by SQS later. see src/queues/sqsProducer.ts
 import { Queue } from 'bullmq';
 import connection from '../config/redis';
 
@@ -16,5 +17,5 @@ export const addDocumentJob = async (docId: string, filePath: string, mimeType: 
     filePath,
     mimeType
   });
-  console.log(`📥 Job added to queue: ${docId}`);
+  console.log(`Job added to queue: ${docId}`);
 };

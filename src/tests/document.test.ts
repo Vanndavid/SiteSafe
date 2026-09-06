@@ -1,81 +1,100 @@
 import request from 'supertest';
 import app from '../server';
-import mongoose from 'mongoose';
-import DocumentModel from '../models/Document';
+import { bearerAuthHeader } from './helpers/auth';
 
-// 1. MOCK AUTHENTICATION
-// We tell Jest: "When the app asks for Clerk, give it this fake user instead."
-// This bypasses the need for a real Bearer token.
-jest.mock('@clerk/express', () => ({
-  clerkMiddleware: () => (req: any, res: any, next: any) => {
-    req.auth = { userId: 'test_user_123' }; // Fake User ID
-    next();
-  },
-  requireAuth: () => (req: any, res: any, next: any) => {
-    // Simulate passing auth
-    req.auth = { userId: 'test_user_123' };
-    next();
-  },
-  getAuth: () => ({ userId: 'test_user_123' }), // Controller uses this
-  clerkClient: {
-    users: {
-      getUser: async () => ({ emailAddresses: [{ emailAddress: 'test@example.com' }] })
-    }
-  }
+jest.mock('../services/documentService', () => ({
+  createUploadIntent: jest.fn(),
 }));
 
-// Clean up DB before/after
-beforeAll(async () => {
-  await DocumentModel.deleteMany({}); // Clear old test data
-});
+import { createUploadIntent } from '../services/documentService';
 
-afterAll(async () => {
-  await mongoose.connection.close();
-});
+const mockedCreateUploadIntent =
+  createUploadIntent as jest.MockedFunction<typeof createUploadIntent>;
 
-describe('Document API Endpoints', () => {
-  
-  let uploadedDocId: string;
-
-  // TEST CASE 1: The "Forgot File" Error
-  it('should return 400 if no file is attached', async () => {
-    const res = await request(app)
-      .post('/api/upload'); // No .attach() here
-    
-    expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('error', 'No file uploaded');
-  });
-
-  // TEST CASE 2: The "Happy Path" Upload
-  it('should upload a file and return 202 Accepted', async () => {
-    // Create a fake file in memory
-    const fileBuffer = Buffer.from('fake pdf content');
+describe('POST /api/documents/upload-url', () => {
+  it('returns upload url for valid request', async () => {
+    mockedCreateUploadIntent.mockResolvedValue({
+      documentId: '123e4567-e89b-12d3-a456-426614174000',
+      key: 'uploads/test_user_123/doc-1-file.pdf',
+      uploadUrl: 'https://example.com/upload',
+      expiresIn: 300,
+    });
 
     const res = await request(app)
-      .post('/api/upload')
-      .attach('document', fileBuffer, 'test-license.pdf'); // Simulate file upload
+      .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
+      .send({
+        fileName: 'file.pdf',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+        projectId: 1,
+      });
 
-    expect(res.statusCode).toEqual(202);
-    expect(res.body.success).toBe(true);
-    expect(res.body.file).toHaveProperty('id');
-    
-    // Save ID for next test
-    uploadedDocId = res.body.file.id;
-
-    // Verify it is actually in the database
-    const dbRecord = await DocumentModel.findById(uploadedDocId);
-    expect(dbRecord).toBeTruthy();
-    expect(dbRecord?.userId).toBe('test_user_123'); // Check if linked to our fake user
-    expect(dbRecord?.status).toBe('pending');
+    expect(res.status).toBe(201);
+    expect(res.body.documentId).toBe('123e4567-e89b-12d3-a456-426614174000');
+    expect(res.body.uploadUrl).toBeDefined();
+    expect(mockedCreateUploadIntent).toHaveBeenCalledWith(
+      'test_user_123',
+      1,
+      'file.pdf',
+      'application/pdf',
+    );
   });
 
-  // TEST CASE 3: Fetching Status
-  it('should fetch the status of the uploaded document', async () => {
+  it('rejects unauthenticated requests', async () => {
     const res = await request(app)
-      .get(`/api/document/${uploadedDocId}`);
+      .post('/api/documents/upload-url')
+      .send({
+        fileName: 'file.pdf',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+      });
 
-    expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty('status', 'pending');
+    expect(res.status).toBe(401);
   });
 
+  it('rejects upload without projectId', async () => {
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
+      .send({
+        fileName: 'file.pdf',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('projectId is required');
+  });
+
+  it('rejects unsupported file type', async () => {
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
+      .send({
+        fileName: 'file.exe',
+        mimeType: 'application/x-msdownload',
+        projectId: 1,
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 500 when service fails', async () => {
+    mockedCreateUploadIntent.mockRejectedValue(
+      new Error('service failure')
+    );
+
+    const res = await request(app)
+      .post('/api/documents/upload-url')
+      .set(bearerAuthHeader())
+      .send({
+        fileName: 'file.pdf',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+        projectId: 1,
+      });
+
+    expect(res.status).toBe(500);
+  });
 });

@@ -35,3 +35,7 @@ src/**/*.d.ts
 src/**/*.map
 # OS
 Thumbs.db
+
+#lambda
+lambdaWorker/node_modules/
+lambdaWorker.zip

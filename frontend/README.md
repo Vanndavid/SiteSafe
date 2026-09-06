@@ -1,5 +1,16 @@
 # React + TypeScript + Vite
 
+## Auth Safety Baseline (JWT)
+
+For this project, keep frontend auth handling simple and safe:
+
+- Do not store access tokens in `localStorage` or `sessionStorage`.
+- Do not print auth tokens in logs or browser console.
+- Keep the access token in React memory and send it as `Authorization: Bearer ...` on API requests.
+- Use `withCredentials: true` for refresh/logout so the httpOnly refresh cookie is sent.
+- On `401`, the API client calls `/api/auth/refresh` and retries the original request.
+- Use HTTPS in production.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

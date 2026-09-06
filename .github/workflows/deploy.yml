@@ -10,10 +10,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Debug SSH key lines
-        run: |
-          echo "Lines in VPS_SSH_KEY:"
-          echo "${{ secrets.VPS_SSH_KEY }}" | wc -l
       - name: SSH and Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -27,10 +23,19 @@ jobs:
             cd /home/ubuntu/traefik-projects/AiCompliance
 
             # 2. Pull latest code
+            git stash
             git pull origin main
 
-            # 3. Rebuild and Restart using the PROD file
+            # 3. Install dependencies and build
+            npm install
+
+            # 4. Install frontend dependencies and build
+            cd frontend
+            npm install
+
+            # 5. Rebuild and Restart using the PROD file
             # Note: Ensure docker-compose.prod.yml exists on your server!
+            cd ..
             docker compose -f docker-compose.prod.yml up -d --build
             
             # Optional: Prune old images to save space

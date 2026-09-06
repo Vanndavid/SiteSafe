@@ -1,8 +1,8 @@
 name: Node.js CI
 
 on:
-  push:
-    branches: [ "main" ]
+  # push:
+  #   branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
@@ -23,7 +23,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x] # Match your local version
+        node-version: [22.x] # Match your local version
 
     steps:
     - uses: actions/checkout@v4
@@ -48,5 +48,9 @@ jobs:
         MONGODB_URI: mongodb://localhost:27017/tradecomply_test
         REDIS_HOST: localhost
         REDIS_PORT: 6379
-        CLERK_SECRET_KEY: mock_key_for_ci
+        JWT_SECRET: test_jwt_secret
         GEMINI_API_KEY: mock_key_for_ci
+        AWS_BUCKET_NAME: dummy-bucket
+        AWS_REGION: ap-southeast-2
+        AWS_ACCESS_KEY_ID: dummy-key
+        AWS_SECRET_ACCESS_KEY: dummy-secret

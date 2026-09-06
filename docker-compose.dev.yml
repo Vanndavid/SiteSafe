@@ -1,52 +1,76 @@
 services:
   # Database
-  mongo:
-    image: mongo:latest
-    container_name: aicompliance_mongo
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    networks: [web]
+  # using atlas
+  # mongo:
+  #   image: mongo:latest
+  #   container_name: aicompliance_mongo
+  #   restart: always
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo_data:/data/db
+  #   networks: [web]
 
-  # Database GUI (View at http://localhost:8081)
-  mongo-express:
-    image: mongo-express
-    container_name: aicompliance_gui
+  postgres:
+    image: postgres:16-alpine
+    container_name: aicompliance_postgres
     restart: always
-    ports:
-      - "8081:8081"
     environment:
-      ME_CONFIG_MONGODB_SERVER: mongo
-      ME_CONFIG_MONGODB_PORT: 27017
-    depends_on:
-      - mongo
-    networks: [web]
-
-  # Queue Service (Required for Day 5)
-  redis:
-    image: redis:alpine
-    container_name: aicompliance_redis
-    restart: always
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aicompliance
     ports:
-      - "6379:6379"
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aicompliance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks: [web]
+  # Database GUI (View at http://localhost:8081)
+  # mongo-express:
+  #   image: mongo-express
+  #   container_name: aicompliance_gui
+  #   restart: always
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     ME_CONFIG_MONGODB_SERVER: mongo
+  #     ME_CONFIG_MONGODB_PORT: 27017
+  #   depends_on:
+  #     - mongo
+  #   networks: [web]
+
+  # Queue Service
+  # replaced by sqs
+  # redis:
+  #   image: redis:alpine
+  #   container_name: aicompliance_redis
+  #   restart: always
+  #   ports:
+  #     - "6379:6379"
+  #   networks: [web]
   # ✅ Backend (DEV mode)
   backend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_backend
     working_dir: /app
     volumes:
       - .:/app
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
     # ports:
     #   - "3000:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # 
+      - WATCHPACK_POLLING=true   # 
     env_file:
       - .env
     depends_on:
-      - mongo
-      - redis
+      postgres:
+        condition: service_healthy
+    #   - redis
     restart: unless-stopped
     # traefik
     networks: [web]
@@ -56,23 +80,24 @@ services:
       - "traefik.http.routers.aicompliance-api.entrypoints=web"
       - "traefik.http.services.aicompliance-api.loadbalancer.server.port=3000"
 
-  worker:
-    image: node:20-alpine
-    container_name: aicompliance_worker
-    working_dir: /app
-    volumes:
-      - .:/app
-    command: npx tsx src/workers/documentWorker.ts
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - mongo
-    restart: unless-stopped
-    networks: [web]
+  # replaced by lambda worker
+  # worker:
+  #   image: node:22-alpine
+  #   container_name: aicompliance_worker
+  #   working_dir: /app
+  #   volumes:
+  #     - .:/app
+  #   command: npx tsx src/workers/documentWorker.ts
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - redis
+  #     - mongo
+  #   restart: unless-stopped
+  #   networks: [web]
   frontend:
     
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_frontend
     working_dir: /app
     volumes:
@@ -92,7 +117,7 @@ services:
       - "traefik.http.services.aicompliance-frontend.loadbalancer.server.port=5173"
 
 volumes:
-  mongo_data:
+  postgres_data:
 
 networks:
   web:

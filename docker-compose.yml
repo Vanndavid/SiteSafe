@@ -1,30 +1,46 @@
-version: '3.8'
 
 services:
   # Database
-  mongo:
-    image: mongo:latest
-    container_name: aicompliance_mongo
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
+  # mongo:
+  #   image: mongo:latest
+  #   container_name: aicompliance_mongo
+  #   restart: always
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo_data:/data/db
 
-  # Database GUI (View at http://localhost:8081)
-  mongo-express:
-    image: mongo-express
-    container_name: aicompliance_gui
+  # # Database GUI (View at http://localhost:8081)
+  # mongo-express:
+  #   image: mongo-express
+  #   container_name: aicompliance_gui
+  #   restart: always
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     ME_CONFIG_MONGODB_SERVER: mongo
+  #     ME_CONFIG_MONGODB_PORT: 27017
+  #   depends_on:
+  #     - mongo
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: aicompliance_postgres
     restart: always
-    ports:
-      - "8081:8081"
     environment:
-      ME_CONFIG_MONGODB_SERVER: mongo
-      ME_CONFIG_MONGODB_PORT: 27017
-    depends_on:
-      - mongo
-
-  # Queue Service (Required for Day 5)
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aicompliance
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aicompliance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  # Queue Service
   redis:
     image: redis:alpine
     container_name: aicompliance_redis
@@ -33,36 +49,40 @@ services:
       - "6379:6379"
   # ✅ Backend (DEV mode)
   backend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_backend
     working_dir: /app
     volumes:
       - .:/app
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"
     ports:
       - "3000:3000"
     env_file:
       - .env
     depends_on:
-      - mongo
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   worker:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_worker
     working_dir: /app
     volumes:
       - .:/app
-    command: npx tsx src/workers/documentWorker.ts
+    command: sh -c "npm install && npx tsx src/workers/documentWorker.ts"
     env_file:
       - .env
     depends_on:
-      - redis
-      - mongo
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
   frontend:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: aicompliance_frontend
     working_dir: /app
     volumes:
@@ -72,4 +92,4 @@ services:
       - "5173:5173"
     restart: unless-stopped
 volumes:
-  mongo_data:
+  postgres_data:

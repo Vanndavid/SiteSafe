@@ -29,16 +29,4 @@ const upload = multer({
     })
 });
 
-// 3. NEW: Function to generate a Download Link
-export const generatePresignedUrl = async (fileKey: string) => {
-    const command = new GetObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: fileKey,
-    });
-
-    // Generate a URL that expires in 1 hour (3600 seconds)
-    const url = await getSignedUrl(s3Config, command, { expiresIn: 3600 });
-    return url;
-};
-
 export default upload;

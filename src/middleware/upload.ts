@@ -1,7 +1,8 @@
-// Not in use. Change to s3uploader.ts
+// this is local storage multer middleware, this will be replaced by S3 uploader later, see src/config/s3uploader.ts
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from '../utils/fileUtils';
 
 // Setup Uploads Directory (using process.cwd() to target root project folder)
 const uploadDir = path.join(process.cwd(), 'uploads');
@@ -21,4 +22,18 @@ const storage = multer.diskStorage({
   }
 });
 
-export const upload = multer({ storage: storage });
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: MAX_UPLOAD_SIZE_BYTES,
+    files: 1,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      cb(new Error('Unsupported file type'));
+      return;
+    }
+
+    cb(null, true);
+  },
+});

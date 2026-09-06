@@ -9,6 +9,6 @@ const connection = new IORedis({
   maxRetriesPerRequest: null // Required by BullMQ
 });
 
-console.log('✅ Redis Connection Initialized');
+console.log('Redis connection initialized');
 
 export default connection;
