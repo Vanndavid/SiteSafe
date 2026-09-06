@@ -10,7 +10,9 @@ services:
   #   networks: [web]
 
   postgres:
-    image: postgres:16-alpine
+    # pgvector build of Postgres 16 - the base image does not ship the extension,
+    # and the DocumentChunk migration creates it.
+    image: pgvector/pgvector:pg16
     container_name: aicompliance_postgres
     restart: always
     environment:

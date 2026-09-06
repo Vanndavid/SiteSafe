@@ -69,6 +69,7 @@ export const startWorker = async () => {
               holderName: aiResult.name,
               confidence: aiResult.confidence,
               content: aiResult.content,
+              pages: Array.isArray(aiResult.pages) ? aiResult.pages : [],
             },
           },
         });

@@ -37,3 +37,22 @@ export interface NotificationItem {
   message: string;
   createdAt: string;
 }
+
+export interface AnswerCitation {
+  documentId: string;
+  documentName: string;
+  pageNumber: number;
+  chunkId: string;
+}
+
+export interface AskResponse {
+  question: string;
+  answer: string;
+  /** False when the documents do not cover the question. */
+  answered: boolean;
+  citations: AnswerCitation[];
+  retrieval: {
+    mode: 'vector' | 'keyword' | 'hybrid';
+    chunkIds: string[];
+  };
+}

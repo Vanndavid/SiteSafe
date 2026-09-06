@@ -10,7 +10,10 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "test": "cross-env NODE_ENV=test jest --runInBand",
     "test:all": "cross-env NODE_ENV=test jest --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "eval": "ts-node --project tsconfig.scripts.json eval/run.ts",
+    "eval:seed": "ts-node --project tsconfig.scripts.json eval/seed.ts",
+    "rag:reindex": "ts-node --project tsconfig.scripts.json scripts/reindexDocuments.ts"
   },
   "repository": {
     "type": "git",

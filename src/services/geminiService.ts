@@ -65,17 +65,21 @@ export const analyzeDocument = async (filePathOrKey: string, mimeType: string) =
     console.log(`Using Gemini Model: ${modelId}`);
 
     const prompt = `
-      You are a strict Compliance Officer. Analyze this image.
-      
+      You are a strict Compliance Officer. Analyze this document.
+
       Task:
       1. Identify the Document Type (e.g., White Card, Driver License).
       2. Extract the Expiry Date (YYYY-MM-DD).
       3. Extract the License Number.
       4. Extract the Name.
       5. Extract a brief summary of content.
-      
+      6. Transcribe the full text of every page, verbatim, in "pages".
+         Preserve each label and its value on the same line (e.g. "Expiry Date: 2027-03-14").
+         Number pages from 1. This transcription is what question answering reads,
+         so do not summarise, reorder, or omit anything from it.
+
       Output ONLY raw JSON. No markdown.
-      Structure: { "type": "string", "expiryDate": "string", "licenseNumber": "string", "name": "string", "confidence": number, "content": "string" }
+      Structure: { "type": "string", "expiryDate": "string", "licenseNumber": "string", "name": "string", "confidence": number, "content": "string", "pages": [{ "page": number, "text": "string" }] }
     `;
 
     // 5. Call AI

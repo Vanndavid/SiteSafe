@@ -52,20 +52,30 @@ The system is designed as an **internal operations tool**, not a public marketpl
   - Holder name
 - Handles varied layouts and low-quality images
 
-### 2. Deadline & Compliance Tracking
+### 2. Ask Your Documents (Retrieval)
+- Plain-language questions answered from your own uploaded documents only
+- Chunking + embeddings in Postgres (`pgvector`), hybrid vector + keyword search
+- Every retrieval is filtered by user and project inside the SQL, so answers
+  respect existing access control
+- Answers cite the source document and page, and say "not found in your
+  documents" rather than guessing
+- Backed by a 32-question evaluation set measuring retrieval accuracy and
+  answer accuracy **separately** — see [docs/ask-your-documents.md](docs/ask-your-documents.md)
+
+### 3. Deadline & Compliance Tracking
 - Stores extracted expiry dates in structured form
 - Automatically calculates:
   - Expired
   - Expiring soon (e.g. within 30 days)
   - Valid
 
-### 3. Asynchronous Processing
+### 4. Asynchronous Processing
 - Document analysis runs in background workers
 - Uploads return immediately
 - Prevents UI blocking and API timeouts
 - Scales independently of user traffic
 
-### 4. Compliance Monitoring & Alerts
+### 5. Compliance Monitoring & Alerts
 - Scheduled jobs scan documents daily
 - Flags upcoming expiries
 - Sends automated reminders via email/SMS
@@ -76,7 +86,7 @@ The system is designed as an **internal operations tool**, not a public marketpl
 - Supports configurable expiry windows via `expiringWithinDays` query param
 - Includes nearest expiring documents for dashboards and audit workflows
 
-### 5. Human Override (Important)
+### 7. Human Override (Important)
 - AI decisions can be manually overridden
 - Final compliance responsibility remains with humans
 - Demonstrates responsible AI usage in production systems

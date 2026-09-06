@@ -14,6 +14,7 @@ import {
   searchProcessedDocuments,
 } from '../services/documentService';
 import { getUnreadNotifications, markNotificationRead } from '../services/notificationService';
+import { getStoredPages, ingestDocumentChunks } from '../services/ragIngestService';
 import type { ExtractedDocumentData } from '../models/Document';
 import { DocumentStatus } from '@prisma/client';
 
@@ -209,7 +210,22 @@ export const updateDocumentProcessingResult = async (req: Request, res: Response
         where: { id },
         data: data,
     });
-   
+
+    // Index the document for retrieval. Extraction has already been paid for and
+    // persisted at this point, so an embedding failure must not fail the
+    // callback - that would make SQS redeliver and re-run the vision call. The
+    // document is left unindexed instead, and `npm run rag:reindex` can pick it
+    // up without another extraction pass.
+    if (status === 'processed') {
+      try {
+        const pages = getStoredPages(updatedDoc.extractedData);
+        const result = await ingestDocumentChunks(updatedDoc.id, pages);
+        console.log(`Indexed ${result.chunksCreated} chunks for document ${updatedDoc.id}`);
+      } catch (indexError) {
+        console.error(`Failed to index document ${updatedDoc.id} for retrieval:`, indexError);
+      }
+    }
+
     res.json({
       success: true,
       document: {
