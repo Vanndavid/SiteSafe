@@ -344,11 +344,27 @@ export const markAsRead = async (req: Request, res: Response) => {
 
 export const downloadDocument = async (req: Request, res: Response) => {
   try {
-    const fileKey = req.params.key;
+    // Express 5 hands a wildcard param back as an array of already-decoded path
+    // segments, not a string. Joining restores the S3 key; using it directly
+    // stringifies to "uploads,userId,file.pdf" and the signed URL 404s.
+    const rawKey = req.params.key as unknown as string | string[] | undefined;
+    const fileKey = Array.isArray(rawKey) ? rawKey.join('/') : rawKey;
     const fileName = req.query.name || 'download';
 
     if (!fileKey) {
       return res.status(400).json({ error: 'File key is required' });
+    }
+
+    const userId = getRequestUserId(req);
+    // Keys are namespaced as uploads/<userId>/... so this also stops one user
+    // signing a URL for another user's object by guessing the path.
+    const doc = await prisma.document.findFirst({
+      where: { storagePath: fileKey, userId },
+      select: { id: true },
+    });
+
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
     }
 
     const downloadUrl = await generatePresignedDownloadUrl(fileKey);
